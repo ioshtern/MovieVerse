@@ -1,28 +1,32 @@
 package main
 
 import (
+	"MovieVerse/controllers"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
+	"MovieVerse/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"MovieVerse/models"  
 )
 
 var db *gorm.DB
 
 func initDatabase() {
 	var err error
-	dsn := "user=postgres password=3052 dbname=movieverse port=5433 sslmode=disable"
+	dsn := "user=postgres password=Bruhmomento dbname=movieverse port=5433 sslmode=disable"
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to the database: %v", err)
 	}
 	fmt.Println("Database connected successfully")
 
-	db.AutoMigrate(&models.User{}, &models.Movie{}, &models.Review{})
+	err = db.AutoMigrate(&models.User{}, &models.Movie{}, &models.Review{})
+	if err != nil {
+		return
+	}
 	fmt.Println("Database migrated")
 }
 
@@ -35,25 +39,34 @@ func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 
 	message, ok := input["message"].(string)
 	if !ok || message == "" {
-		json.NewEncoder(w).Encode(models.Response{
+		err := json.NewEncoder(w).Encode(models.Response{
 			Status:  "fail",
 			Message: "Invalid JSON message",
 		})
+		if err != nil {
+			return
+		}
 		return
 	}
 
 	fmt.Println("Received message:", message)
-	json.NewEncoder(w).Encode(models.Response{
+	err := json.NewEncoder(w).Encode(models.Response{
 		Status:  "success",
 		Message: "Data successfully received",
 	})
+	if err != nil {
+		return
+	}
 }
 
 func handleGetRequest(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(models.Response{
+	err := json.NewEncoder(w).Encode(models.Response{
 		Status:  "success",
 		Message: "GET request received",
 	})
+	if err != nil {
+		return
+	}
 }
 
 func main() {
@@ -70,6 +83,60 @@ func main() {
 	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			handleGetRequest(w, r)
+		} else {
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		}
+	})
+
+	http.HandleFunc("/movies", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if id := r.URL.Query().Get("id"); id != "" {
+				controllers.GetMovieByID(db, w, r)
+			} else {
+				controllers.GetMovies(db, w, r)
+			}
+		} else if r.Method == http.MethodPost {
+			controllers.CreateMovie(db, w, r)
+		} else if r.Method == http.MethodPut {
+			controllers.UpdateMovie(db, w, r)
+		} else if r.Method == http.MethodDelete {
+			controllers.DeleteMovie(db, w, r)
+		} else {
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		}
+	})
+
+	http.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if id := r.URL.Query().Get("id"); id != "" {
+				controllers.GetUserByID(db, w, r)
+			} else {
+				controllers.GetUsers(db, w, r)
+			}
+		} else if r.Method == http.MethodPost {
+			controllers.CreateUser(db, w, r)
+		} else if r.Method == http.MethodPut {
+			controllers.UpdateUser(db, w, r)
+		} else if r.Method == http.MethodDelete {
+			controllers.DeleteUser(db, w, r)
+		} else {
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		}
+	})
+
+	http.HandleFunc("/reviews", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if id := r.URL.Query().Get("id"); id != "" {
+				controllers.GetReviewByID(db, w, r)
+			} else {
+				controllers.GetReviews(db, w, r)
+			}
+		} else if r.Method == http.MethodPost {
+			controllers.CreateReview(db, w, r)
+		} else if r.Method == http.MethodPut {
+			controllers.UpdateReview(db, w, r)
+		} else if r.Method == http.MethodDelete {
+			controllers.DeleteReview(db, w, r)
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
