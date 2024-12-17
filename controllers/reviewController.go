@@ -7,14 +7,31 @@ import (
 	"net/http"
 )
 
-func GetUsers(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	var users []models.User
-	if err := db.Find(&users).Error; err != nil {
-		http.Error(w, "Failed to fetch users", http.StatusInternalServerError)
+func GetReviews(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+	var reviews []models.Review
+	if err := db.Preload("Movie").Preload("User").Find(&reviews).Error; err != nil {
+		http.Error(w, "Failed to fetch reviews", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(users)
+	err := json.NewEncoder(w).Encode(reviews)
+	if err != nil {
+		return
+	}
+}
+
+func CreateReview(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+	var review models.Review
+	if err := json.NewDecoder(r.Body).Decode(&review); err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+	if err := db.Create(&review).Error; err != nil {
+		http.Error(w, "Failed to create review", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(review)
 	if err != nil {
 		return
 	}
@@ -35,23 +52,6 @@ func GetReviewByID(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(review)
-	if err != nil {
-		return
-	}
-}
-
-func CreateUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	var user models.User
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
-		return
-	}
-	if err := db.Create(&user).Error; err != nil {
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(user)
 	if err != nil {
 		return
 	}
