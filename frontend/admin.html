@@ -64,6 +64,14 @@
 
 <h2>Movies</h2>
 
+<h2>Response</h2>
+<div id="response-container">
+    <table id="response-table">
+        <tbody id="response-body"></tbody>
+    </table>
+</div>
+<pre id="response"></pre>
+
 <button onclick="getMovies()">Get All Movies</button>
 
 <h3>Get Movie by ID</h3>
@@ -121,13 +129,7 @@
     <button type="submit">Delete User</button>
 </form>
 
-<h2>Response</h2>
-<div id="response-container">
-    <table id="response-table">
-        <tbody id="response-body"></tbody>
-    </table>
-</div>
-<pre id="response"></pre>
+
 
 <script>
     const apiUrl = 'http://localhost:8080';
