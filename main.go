@@ -151,5 +151,5 @@ func main() {
 }
 
 func serveHTML(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "frontend/admin.html") // Make sure to change to your actual HTML file path
+	http.ServeFile(w, r, "frontend/admin.html")
 }
