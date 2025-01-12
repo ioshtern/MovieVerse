@@ -68,6 +68,64 @@ func handleGetRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+func handleMoviesEndpoint(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			query := db.Model(&models.Movie{})
+
+			// Filtering
+			filter := r.URL.Query().Get("filter")
+			if filter != "" {
+				query = query.Where("title ILIKE ? OR director ILIKE ?", "%"+filter+"%", "%"+filter+"%")
+			}
+
+			// Sorting
+			sort := r.URL.Query().Get("sort")
+			order := r.URL.Query().Get("order")
+			if sort != "" {
+				if order != "asc" && order != "desc" {
+					order = "asc"
+				}
+				query = query.Order(fmt.Sprintf("%s %s", sort, order))
+			}
+
+			// Pagination
+			page := 1
+			limit := 10
+			if p := r.URL.Query().Get("page"); p != "" {
+				fmt.Sscanf(p, "%d", &page)
+			}
+			if l := r.URL.Query().Get("limit"); l != "" {
+				fmt.Sscanf(l, "%d", &limit)
+			}
+
+			offset := (page - 1) * limit
+			query = query.Offset(offset).Limit(limit)
+
+			var movies []models.Movie
+			if err := query.Find(&movies).Error; err != nil {
+				http.Error(w, "Failed to retrieve movies", http.StatusInternalServerError)
+				return
+			}
+
+			// Total count for pagination
+			var total int64
+			db.Model(&models.Movie{}).Count(&total)
+			totalPages := (total + int64(limit) - 1) / int64(limit)
+
+			response := map[string]interface{}{
+				"movies":      movies,
+				"page":        page,
+				"total_pages": totalPages,
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+		} else {
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		}
+	}
+}
 
 func main() {
 	http.HandleFunc("/", serveHTML)
@@ -92,11 +150,7 @@ func main() {
 
 	http.HandleFunc("/movies", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			if id := r.URL.Query().Get("id"); id != "" {
-				controllers.GetMovieByID(db, w, r)
-			} else {
-				controllers.GetMovies(db, w, r)
-			}
+			controllers.GetMoviesWithFilters(db, w, r)
 		} else if r.Method == http.MethodPost {
 			controllers.CreateMovie(db, w, r)
 		} else if r.Method == http.MethodPut {

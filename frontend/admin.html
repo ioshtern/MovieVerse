@@ -87,6 +87,33 @@
     <button type="submit">Delete Movie</button>
 </form>
 
+<h3>Update Movie</h3>
+<form id="updateMovieForm" onsubmit="updateMovie(event)">
+    <label for="updateMovieID">Movie ID:</label>
+    <input type="text" id="updateMovieID" name="movieID" required>
+
+    <label for="title">Title:</label>
+    <input type="text" id="updateTitle" name="title">
+
+    <label for="director">Director:</label>
+    <input type="text" id="updateDirector" name="director">
+
+    <label for="country">Country:</label>
+    <input type="text" id="updateCountry" name="country">
+
+    <label for="genres">Genres (comma-separated):</label>
+    <input type="text" id="updateGenres" name="genres">
+
+    <label for="releaseYear">Release Year:</label>
+    <input type="number" id="updateReleaseYear" name="releaseYear">
+
+    <label for="description">Description:</label>
+    <textarea id="updateDescription" name="description" rows="3"></textarea>
+
+    <button type="submit">Update Movie</button>
+</form>
+
+
 <h3>Create Movie</h3>
 <form id="createMovieForm" onsubmit="createMovie(event)">
     <label for="title">Title:</label>
@@ -179,6 +206,28 @@
             responseBody.appendChild(row);
         }
     };
+    function updateMovie(event) {
+        event.preventDefault();
+
+        const movieID = document.getElementById("updateMovieID").value;
+        const formData = {
+            title: document.getElementById("updateTitle").value || null,
+            director: document.getElementById("updateDirector").value || null,
+            country: document.getElementById("updateCountry").value || null,
+            genres: document.getElementById("updateGenres").value ? document.getElementById("updateGenres").value.split(",") : null,
+            releaseYear: document.getElementById("updateReleaseYear").value ? parseInt(document.getElementById("updateReleaseYear").value) : null,
+            description: document.getElementById("updateDescription").value || null,
+        };
+
+        fetch(`${apiUrl}/movies?id=${movieID}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(formData),
+        })
+            .then(res => res.json())
+            .then(showResponse)
+            .catch(console.error);
+    }
 
     function getMovies() {
         fetch(`${apiUrl}/movies`)
