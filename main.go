@@ -16,7 +16,7 @@ var db *gorm.DB
 
 func initDatabase() {
 	var err error
-	dsn := "user=postgres password=3052 dbname=movieverse port=5433 sslmode=disable"
+	dsn := "user=postgres password=Bruhmomento dbname=movieverse port=5433 sslmode=disable"
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to the database: %v", err)
@@ -151,5 +151,5 @@ func main() {
 }
 
 func serveHTML(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "frontend/admin.html") // Make sure to change to your actual HTML file path
+	http.ServeFile(w, r, "frontend/admin.html")
 }
