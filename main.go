@@ -2,21 +2,40 @@ package main
 
 import (
 	"MovieVerse/controllers"
+	"MovieVerse/models"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-
-	"MovieVerse/models"
+	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"log"
+	"net/http"
+	"os"
 )
 
-var db *gorm.DB
+var (
+	db     *gorm.DB
+	logger = logrus.New()
+)
+
+func initLogger() {
+	file, err := os.OpenFile("user_actions.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	logger.SetOutput(file)
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	logger.SetLevel(logrus.InfoLevel) 
+}
+
+func logAction(fields logrus.Fields, message string) {
+	logger.WithFields(fields).Info(message)
+	fmt.Printf("%s | Fields: %+v\n", message, fields)
+}
 
 func initDatabase() {
 	var err error
-	dsn := "user=postgres password=Bruhmomento dbname=movieverse port=5433 sslmode=disable"
+	dsn := "user=postgres password=3052 dbname=movieverse port=5433 sslmode=disable"
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to the database: %v", err)
@@ -39,35 +58,34 @@ func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 
 	message, ok := input["message"].(string)
 	if !ok || message == "" {
-		err := json.NewEncoder(w).Encode(models.Response{
-			Status:  "fail",
-			Message: "Invalid JSON message",
-		})
-		if err != nil {
-			return
-		}
+		http.Error(w, "Invalid JSON message", http.StatusBadRequest)
 		return
 	}
 
-	fmt.Println("Received message:", message)
-	err := json.NewEncoder(w).Encode(models.Response{
+	logAction(logrus.Fields{
+		"message": message,
+		"action":  "post_request",
+	}, "POST request received")
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(models.Response{
 		Status:  "success",
 		Message: "Data successfully received",
 	})
-	if err != nil {
-		return
-	}
 }
 
 func handleGetRequest(w http.ResponseWriter, r *http.Request) {
-	err := json.NewEncoder(w).Encode(models.Response{
+	logAction(logrus.Fields{
+		"action": "get_request",
+	}, "GET request received")
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(models.Response{
 		Status:  "success",
 		Message: "GET request received",
 	})
-	if err != nil {
-		return
-	}
 }
+
 func handleMoviesEndpoint(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -77,6 +95,10 @@ func handleMoviesEndpoint(db *gorm.DB) http.HandlerFunc {
 			filter := r.URL.Query().Get("filter")
 			if filter != "" {
 				query = query.Where("title ILIKE ? OR director ILIKE ?", "%"+filter+"%", "%"+filter+"%")
+				logAction(logrus.Fields{
+					"action": "filter",
+					"filter": filter,
+				}, "Movies filtered")
 			}
 
 			// Sorting
@@ -91,6 +113,11 @@ func handleMoviesEndpoint(db *gorm.DB) http.HandlerFunc {
 				} else {
 					query = query.Order(fmt.Sprintf("%s %s", sort, order))
 				}
+				logAction(logrus.Fields{
+					"action": "sort",
+					"sort":   sort,
+					"order":  order,
+				}, "Movies sorted")
 			}
 
 			// Pagination
@@ -125,6 +152,11 @@ func handleMoviesEndpoint(db *gorm.DB) http.HandlerFunc {
 
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
+			logAction(logrus.Fields{
+				"action": "get_movies",
+				"page":   page,
+				"limit":  limit,
+			}, "Movies retrieved")
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
@@ -132,9 +164,10 @@ func handleMoviesEndpoint(db *gorm.DB) http.HandlerFunc {
 }
 
 func main() {
-	http.HandleFunc("/", serveHTML)
-
+	initLogger()
 	initDatabase()
+
+	http.HandleFunc("/", serveHTML)
 
 	http.HandleFunc("/post", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -154,13 +187,74 @@ func main() {
 
 	http.HandleFunc("/movies", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			controllers.GetMoviesWithFilters(db, w, r)
-		} else if r.Method == http.MethodPost {
-			controllers.CreateMovie(db, w, r)
-		} else if r.Method == http.MethodPut {
-			controllers.UpdateMovie(db, w, r)
-		} else if r.Method == http.MethodDelete {
-			controllers.DeleteMovie(db, w, r)
+			query := db.Model(&models.Movie{})
+
+			// Filtering
+			filter := r.URL.Query().Get("filter")
+			if filter != "" {
+				query = query.Where("title ILIKE ? OR director ILIKE ?", "%"+filter+"%", "%"+filter+"%")
+				logAction(logrus.Fields{
+					"action": "filter",
+					"filter": filter,
+				}, "Movies filtered")
+			}
+
+			// Sorting
+			sort := r.URL.Query().Get("sort")
+			order := r.URL.Query().Get("order")
+			if sort != "" {
+				if order != "asc" && order != "desc" {
+					order = "asc"
+				}
+				if sort == "genres" {
+					query = query.Order("genres " + order)
+				} else {
+					query = query.Order(fmt.Sprintf("%s %s", sort, order))
+				}
+				logAction(logrus.Fields{
+					"action": "sort",
+					"sort":   sort,
+					"order":  order,
+				}, "Movies sorted")
+			}
+
+			// Pagination
+			page := 1
+			limit := 10
+			if p := r.URL.Query().Get("page"); p != "" {
+				fmt.Sscanf(p, "%d", &page)
+			}
+			if l := r.URL.Query().Get("limit"); l != "" {
+				fmt.Sscanf(l, "%d", &limit)
+			}
+
+			offset := (page - 1) * limit
+			query = query.Offset(offset).Limit(limit)
+
+			var movies []models.Movie
+			if err := query.Find(&movies).Error; err != nil {
+				http.Error(w, "Failed to retrieve movies", http.StatusInternalServerError)
+				return
+			}
+
+			// Total count for pagination
+			var total int64
+			db.Model(&models.Movie{}).Count(&total)
+			totalPages := (total + int64(limit) - 1) / int64(limit)
+
+			response := map[string]interface{}{
+				"movies":      movies,
+				"page":        page,
+				"total_pages": totalPages,
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+			logAction(logrus.Fields{
+				"action": "get_movies",
+				"page":   page,
+				"limit":  limit,
+			}, "Movies retrieved")
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
@@ -170,15 +264,36 @@ func main() {
 		if r.Method == http.MethodGet {
 			if id := r.URL.Query().Get("id"); id != "" {
 				controllers.GetUserByID(db, w, r)
+				logAction(logrus.Fields{
+					"endpoint": "/users",
+					"method":   "GET",
+					"user_id":  id,
+				}, "User details retrieved")
 			} else {
 				controllers.GetUsers(db, w, r)
+				logAction(logrus.Fields{
+					"endpoint": "/users",
+					"method":   "GET",
+				}, "All users retrieved")
 			}
 		} else if r.Method == http.MethodPost {
 			controllers.CreateUser(db, w, r)
+			logAction(logrus.Fields{
+				"endpoint": "/users",
+				"method":   "POST",
+			}, "User created")
 		} else if r.Method == http.MethodPut {
 			controllers.UpdateUser(db, w, r)
+			logAction(logrus.Fields{
+				"endpoint": "/users",
+				"method":   "PUT",
+			}, "User updated")
 		} else if r.Method == http.MethodDelete {
 			controllers.DeleteUser(db, w, r)
+			logAction(logrus.Fields{
+				"endpoint": "/users",
+				"method":   "DELETE",
+			}, "User deleted")
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
@@ -188,15 +303,36 @@ func main() {
 		if r.Method == http.MethodGet {
 			if id := r.URL.Query().Get("id"); id != "" {
 				controllers.GetReviewByID(db, w, r)
+				logAction(logrus.Fields{
+					"endpoint":  "/reviews",
+					"method":    "GET",
+					"review_id": id,
+				}, "Review details retrieved")
 			} else {
 				controllers.GetReviews(db, w, r)
+				logAction(logrus.Fields{
+					"endpoint": "/reviews",
+					"method":   "GET",
+				}, "All reviews retrieved")
 			}
 		} else if r.Method == http.MethodPost {
 			controllers.CreateReview(db, w, r)
+			logAction(logrus.Fields{
+				"endpoint": "/reviews",
+				"method":   "POST",
+			}, "Review created")
 		} else if r.Method == http.MethodPut {
 			controllers.UpdateReview(db, w, r)
+			logAction(logrus.Fields{
+				"endpoint": "/reviews",
+				"method":   "PUT",
+			}, "Review updated")
 		} else if r.Method == http.MethodDelete {
 			controllers.DeleteReview(db, w, r)
+			logAction(logrus.Fields{
+				"endpoint": "/reviews",
+				"method":   "DELETE",
+			}, "Review deleted")
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
