@@ -86,7 +86,11 @@ func handleMoviesEndpoint(db *gorm.DB) http.HandlerFunc {
 				if order != "asc" && order != "desc" {
 					order = "asc"
 				}
-				query = query.Order(fmt.Sprintf("%s %s", sort, order))
+				if sort == "genres" {
+					query = query.Order("genres " + order)
+				} else {
+					query = query.Order(fmt.Sprintf("%s %s", sort, order))
+				}
 			}
 
 			// Pagination
