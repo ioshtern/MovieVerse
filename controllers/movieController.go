@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"gorm.io/gorm"
 	"io/ioutil"
+	"log"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -146,6 +148,16 @@ func DeleteMovie(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func init() {
+	// Set up logging to file
+	logFile, err := os.OpenFile("user_actions.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	log.SetOutput(logFile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile) // Include timestamp and file/line number
+}
+
 func GetMoviesWithFilters(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 	genres := r.URL.Query()["genres"]
 	countries := r.URL.Query()["country"]
@@ -156,7 +168,6 @@ func GetMoviesWithFilters(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 	pageStr := r.URL.Query().Get("page")
 	limitStr := r.URL.Query().Get("limit")
 
-	// Default values for pagination
 	page, _ := strconv.Atoi(pageStr)
 	if page < 1 {
 		page = 1
@@ -166,67 +177,80 @@ func GetMoviesWithFilters(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		limit = 10
 	}
 
-	// Initialize query
 	query := db.Model(&models.Movie{})
 
-	// Apply filters for genres
+	isFiltering := false
+	isSorting := sort != ""
+
 	if len(genres) > 0 {
-		// Construct the JSON array for filtering and cast to jsonb (corrected formatting)
+		isFiltering = true
 		genreFilter := fmt.Sprintf(`%s`, strings.Join(genres, `","`))
 		query = query.Where("genres::jsonb @> ?::jsonb", genreFilter)
 	}
 
-	// Apply filters for countries
 	if len(countries) > 0 {
+		isFiltering = true
 		query = query.Where("country IN ?", countries)
 	}
 
-	// Apply year filters (year_from and year_to)
 	if yearFrom != "" {
 		if yearFromInt, err := strconv.Atoi(yearFrom); err == nil {
+			isFiltering = true
 			query = query.Where("release_year >= ?", yearFromInt)
 		}
 	}
 	if yearTo != "" {
 		if yearToInt, err := strconv.Atoi(yearTo); err == nil {
+			isFiltering = true
 			query = query.Where("release_year <= ?", yearToInt)
 		}
 	}
 
-	// Sorting logic
 	if sort == "" {
-		sort = "title" // Default sort field
+		sort = "title"
 	}
 	if order != "asc" && order != "desc" {
-		order = "asc" // Default sort order
+		order = "asc"
 	}
 
-	// Sort by genres (sorting by the first genre in the JSON array)
 	if sort == "genres" {
-		query = query.Order(fmt.Sprintf("genres->>0 %s", order)) // Extracts the first genre for sorting
+		query = query.Order(fmt.Sprintf("genres->>0 %s", order))
 	} else {
-		query = query.Order(fmt.Sprintf("\"%s\" %s", sort, order)) // General sorting
+		query = query.Order(fmt.Sprintf("\"%s\" %s", sort, order))
 	}
 
-	// Count total records
 	var totalRecords int64
 	if err := query.Count(&totalRecords).Error; err != nil {
 		http.Error(w, "Error counting movies", http.StatusInternalServerError)
 		return
 	}
 
-	// Calculate total pages and apply pagination
 	totalPages := int(math.Ceil(float64(totalRecords) / float64(limit)))
 	offset := (page - 1) * limit
 
-	// Fetch movies
 	var movies []models.Movie
 	if err := query.Offset(offset).Limit(limit).Find(&movies).Error; err != nil {
 		http.Error(w, "Error fetching movies", http.StatusInternalServerError)
 		return
 	}
 
-	// Prepare the response
+	status := "none"
+	if isFiltering && isSorting {
+		status = "filtering and sorting"
+	} else if isFiltering {
+		status = "filtering"
+	} else if isSorting {
+		status = "sorting"
+	}
+
+	log.Printf("endpoint: /movies, method: GET, status: %s, filters: %+v, sort: %s, order: %s, page: %d, limit: %d",
+		status, map[string]interface{}{
+			"genres":    genres,
+			"countries": countries,
+			"year_from": yearFrom,
+			"year_to":   yearTo,
+		}, sort, order, page, limit)
+
 	response := map[string]interface{}{
 		"movies":      movies,
 		"total_pages": totalPages,
@@ -240,9 +264,9 @@ func GetMoviesWithFilters(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 			"sort":      sort,
 			"order":     order,
 		},
+		"status": status,
 	}
 
-	// Send response as JSON
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
