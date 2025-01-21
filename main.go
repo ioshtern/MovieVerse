@@ -5,17 +5,54 @@ import (
 	"MovieVerse/models"
 	"encoding/json"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
+	"sync"
 )
 
 var (
-	db     *gorm.DB
-	logger = logrus.New()
+	db       *gorm.DB
+	logger   = logrus.New()
+	rlimiter *RateLimiter
 )
+
+type RateLimiter struct {
+	limiter *rate.Limiter
+	mutex   sync.Mutex
+}
+
+func NewRateLimiter(rps int, burst int) *RateLimiter {
+	return &RateLimiter{
+		limiter: rate.NewLimiter(rate.Limit(rps), burst),
+	}
+}
+
+func (rl *RateLimiter) Allow() bool {
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
+	return rl.limiter.Allow()
+}
+
+func rateLimitedHandler(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !rlimiter.Allow() {
+			// Set headers for the response
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusTooManyRequests) // Set status code first
+
+			_, err := w.Write([]byte("<script>alert('Too Many Requests. Please try again later.');</script>"))
+			if err != nil {
+				logger.WithError(err).Error("Failed to write alert response for rate limiting")
+			}
+			return
+		}
+		next(w, r)
+	}
+}
 
 func initLogger() {
 	file, err := os.OpenFile("user_actions.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -90,27 +127,29 @@ func main() {
 	initLogger()
 	initDatabase()
 
-	http.HandleFunc("/", serveHTML)
+	rlimiter = NewRateLimiter(1, 1)
 
-	http.HandleFunc("/post", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", rateLimitedHandler(serveHTML))
+
+	http.HandleFunc("/post", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			handlePostRequest(w, r)
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			logger.Warn("Invalid request method for /post endpoint")
 		}
-	})
+	}))
 
-	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/get", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			handleGetRequest(w, r)
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			logger.Warn("Invalid request method for /get endpoint")
 		}
-	})
+	}))
 
-	http.HandleFunc("/movies", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/movies", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			controllers.GetMoviesWithFilters(db, w, r)
@@ -128,9 +167,9 @@ func main() {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			logger.Warn("Invalid request method for /movies endpoint")
 		}
-	})
+	}))
 
-	http.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/users", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			if id := r.URL.Query().Get("id"); id != "" {
@@ -153,9 +192,9 @@ func main() {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			logger.Warn("Invalid request method for /users endpoint")
 		}
-	})
+	}))
 
-	http.HandleFunc("/reviews", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/reviews", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			if id := r.URL.Query().Get("id"); id != "" {
@@ -178,7 +217,7 @@ func main() {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			logger.Warn("Invalid request method for /reviews endpoint")
 		}
-	})
+	}))
 
 	logger.Info("Server is running on port 8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
