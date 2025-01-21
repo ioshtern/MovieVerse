@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MovieVerse Admin Panel</title>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <style>
         /* Styles */
         body {
@@ -137,6 +138,28 @@
             <button id="next-button" onclick="nextPage()">Next</button>
         </div>
     </div>
+    <div class="contact-section">
+        <h2>Contact Admin (Tech Support)</h2>
+        <form id="contact-form">
+            <div class="form-group">
+                <label for="from-name">Your Email</label>
+                <input type="email" id="from-name" name="from_name" placeholder="Enter your email" required>
+            </div>
+            <div class="form-group">
+                <label for="subject">Subject</label>
+                <input type="text" id="subject" name="subject" placeholder="Enter subject" required>
+            </div>
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="5" placeholder="Describe your issue or question" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="attachment">Attachment(<50kb) </label>
+                <input type="file" id="attachment" name="attachment" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx">
+            </div>
+            <button type="submit" id="send-button">Send</button>
+        </form>
+    </div>
 </div>
 <script>
     const apiUrl = 'http://localhost:8080';
@@ -146,6 +169,7 @@
     let sortField = '';
     let sortOrder = 'asc';
     let activeFilters = {};  // Object to store active filters
+
 
     function getAllMovies(page = 1, filters = {}) {
         let filterQuery = '';
@@ -272,6 +296,43 @@
 
     // Load the movies when the page loads with initial filters
     getAllMovies(1, activeFilters);
+
+    // Initialize EmailJS
+    emailjs.init('3M4nEbSajLWm5lzGD'); // Replace with your EmailJS public key
+
+    document.getElementById('contact-form').addEventListener('submit', function (event) {
+        event.preventDefault(); // Prevent default form submission
+
+        const subject = document.getElementById('subject').value;
+        const description = document.getElementById('description').value;
+        const fromName = document.getElementById('from-name').value; // Get user's email
+        const fileInput = document.getElementById('attachment'); // Get file input
+
+        if (fileInput.files.length > 0) {
+            const reader = new FileReader();
+            reader.onload = function () {
+                const fileContent = reader.result.split(',')[1]; // Get Base64 content
+                const templateParams = {
+                    to_email: 'nbekalife@gmail.com', // Admin email
+                    subject: subject,
+                    description: description,
+                    from_name: fromName, // Include user's email
+                    attachment: fileContent, // Add Base64 attachment
+                };
+
+                // Send email with EmailJS
+                emailjs.send('service_13n6h4i', 'template_zclfc5r', templateParams)
+                    .then(function (response) {
+                        alert('SUCCESS!', response.status, response.text);
+                    }, function (error) {
+                        alert('FAILED...', error);
+                    });
+            };
+            reader.readAsDataURL(fileInput.files[0]); // Read file as Base64
+        } else {
+            console.log('No attachment selected.');
+        }
+    });
 </script>
 </body>
 </html>
