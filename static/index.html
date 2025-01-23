@@ -14,7 +14,7 @@
             color: #fff;
         }
         .banner {
-            background: url('banner.png') no-repeat center center;
+            background: url('static/banner.png') no-repeat center center;
             background-size: cover;
             height: 575px;
             align-items: center;
@@ -66,7 +66,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2 ">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/taxidriver.html" class="text-decoration-none text-black">
-                            <img src="pics/movie1.png" class="card-img-top" alt="Taxi Driver">
+                            <img src="static/pics/movie1.png" class="card-img-top" alt="Taxi Driver">
                             <div class="card-text text-center">Taxi Driver</div>
                         </a>
                     </div>
@@ -74,7 +74,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/parasite.html" class="text-decoration-none text-black">
-                            <img src="pics/movie2.png" class="card-img-top" alt="Parasite">
+                            <img src="static/pics/movie2.png" class="card-img-top" alt="Parasite">
                             <div class="card-text text-center">Parasite</div>
                         </a>
                     </div>
@@ -83,7 +83,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/breakingbad.html" class="text-decoration-none text-black">
-                            <img src="pics/movie3.png" class="card-img-top" alt="Breaking Bad">
+                            <img src="static/pics/movie3.png" class="card-img-top" alt="Breaking Bad">
                             <div class="card-text text-center">Breaking Bad</div>
                         </a>
                     </div>
@@ -91,7 +91,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/dark.html" class="text-decoration-none text-black">
-                            <img src="pics/movie4.png" class="card-img-top" alt="Dark">
+                            <img src="static/pics/movie4.png" class="card-img-top" alt="Dark">
                             <div class="card-text text-center">Dark</div>
                         </a>
                     </div>
@@ -99,7 +99,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/bojack.html" class="text-decoration-none text-black">
-                            <img src="pics/movie5.png" class="card-img-top" alt="Bojack">
+                            <img src="static/pics/movie5.png" class="card-img-top" alt="Bojack">
                             <div class="card-text text-center">Bojack Horseman</div>
                         </a>
                     </div>
@@ -107,7 +107,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/harakiri.html" class="text-decoration-none text-black">
-                            <img src="pics/movie6.png" class="card-img-top" alt="Harakiri">
+                            <img src="static/pics/movie6.png" class="card-img-top" alt="Harakiri">
                             <div class="card-text text-center">Harakiri</div>
                         </a>
                     </div>
@@ -122,7 +122,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2 ">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/beef.html" class="text-decoration-none text-black">
-                            <img src="pics/movie7.png" class="card-img-top" alt="Beef">
+                            <img src="static/pics/movie7.png" class="card-img-top" alt="Beef">
                             <div class="card-text text-center">Beef</div>
                         </a>
                     </div>
@@ -130,7 +130,7 @@
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <div class="card bg-secondary p-1 movie ">
                         <a href="movies/skin.html" class="text-decoration-none text-black">
-                            <img src="pics/movie8.png" class="card-img-top" alt="Skin">
+                            <img src="static/pics/movie8.png" class="card-img-top" alt="Skin">
                             <div class="card-text text-center">The Skin I Live in</div>
                         </a>
                     </div>
@@ -168,8 +168,8 @@
             const userToken = getCookie('userToken');
             if (userToken) {
                 // User is logged in
-                loginButton.style.display = 'none';
-                signupButton.style.display = 'none';
+                if (loginButton) loginButton.style.display = 'none';
+                if (signupButton) signupButton.style.display = 'none';
 
                 // Add Logout button
                 logoutButton.textContent = 'Logout';
@@ -179,11 +179,11 @@
                     document.cookie = 'userToken=; Max-Age=0; path=/';
                     window.location.reload();
                 });
-                loginButton.parentNode.appendChild(logoutButton);
+                if (loginButton) loginButton.parentNode.appendChild(logoutButton);
             } else {
                 // User is not logged in
-                loginButton.style.display = '';
-                signupButton.style.display = '';
+                if (loginButton) loginButton.style.display = '';
+                if (signupButton) signupButton.style.display = '';
                 if (logoutButton.parentNode) {
                     logoutButton.parentNode.removeChild(logoutButton);
                 }
@@ -192,7 +192,6 @@
 
         // Run on page load
         document.addEventListener('DOMContentLoaded', updateNavButtons);
-
     </script>
 </body>
 </html>

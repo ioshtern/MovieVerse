@@ -1,0 +1,4 @@
+# Enviromental files
+.env
+user_actions.log
+.idea/
