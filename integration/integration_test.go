@@ -22,7 +22,7 @@ var testDB *gorm.DB
 var testMux *http.ServeMux
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	dsn := "user=postgres password=3052 dbname=movieverse port=5433 sslmode=disable"
+	dsn := "user=postgres password=Bruhmomento dbname=movieverse port=5433 sslmode=disable"
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
