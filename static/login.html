@@ -31,7 +31,38 @@
             <p>Don't have an account? <a class="text-dark" href="signup.html">Sign up</a></p>
         </div>
     </div>
-    <script src="scripts/login.js"></script>
+    <script>
+        document.getElementById("loginForm").addEventListener("submit", async function (event) {
+            event.preventDefault(); // Prevent the default form submission
+
+            const email = document.getElementById("email").value;
+            const password = document.getElementById("password").value;
+
+            try {
+                const response = await fetch("/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                // Check for HTTP errors
+                if (!response.ok) {
+                    const errorText = await response.text(); // Read the response as plain text
+                    throw new Error(errorText.trim()); // Pass the error to the catch block
+                }
+
+                const data = await response.json(); // Parse the JSON response
+                document.cookie = `userToken=${data.token}; path=/`; // Store the token in a cookie
+                window.location.href = "index.html"; // Redirect to the main page
+            } catch (error) {
+                console.error("Error:", error.message);
+                alert(error.message); // Display a friendly error message to the user
+            }
+        });
+
+    </script>
     
     
 </body>

@@ -11,7 +11,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -122,6 +124,13 @@ func handleGetRequest(w http.ResponseWriter, r *http.Request) {
 		Message: "GET request received",
 	})
 }
+func respondWithError(w http.ResponseWriter, statusCode int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": message,
+	})
+}
 
 func main() {
 	initLogger()
@@ -129,7 +138,13 @@ func main() {
 
 	rlimiter = NewRateLimiter(1, 1)
 
-	http.HandleFunc("/", rateLimitedHandler(serveHTML))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" && r.Method == http.MethodGet {
+			serveHTML(w, r)
+			return
+		}
+		respondWithError(w, http.StatusNotFound, "Endpoint not found")
+	})
 
 	http.HandleFunc("/post", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -139,6 +154,72 @@ func main() {
 			logger.Warn("Invalid request method for /post endpoint")
 		}
 	}))
+	// Endpoint for serving the main page
+	http.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
+		// Check if the user is logged in by verifying the session or token
+		cookie, err := r.Cookie("userToken")
+		if err != nil || cookie.Value == "" {
+			// If not logged in, serve the page as-is
+			http.ServeFile(w, r, "static/index.html")
+			return
+		}
+
+		// If logged in, modify the page to remove login and sign-up buttons
+		page, err := os.ReadFile("static/index.html")
+		if err != nil {
+			http.Error(w, "Unable to load the main page", http.StatusInternalServerError)
+			return
+		}
+
+		// Replace the buttons with an empty string
+		updatedPage := strings.ReplaceAll(string(page), `<a href="login.html" class="btn btn-outline-light ms-2">Login</a>`, "")
+		updatedPage = strings.ReplaceAll(updatedPage, `<a href="signup.html" class="btn btn-outline-light ms-2">Sign Up</a>`, "")
+
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(updatedPage))
+	})
+
+	// Serve static HTML files
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+	http.HandleFunc("/signup.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/signup.html")
+	})
+	http.HandleFunc("/login.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/login.html")
+	})
+
+	http.HandleFunc("/signup", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			controllers.CreateUser(db, w, r)
+		default:
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		}
+	}))
+	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			controllers.LoginUser(db, w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "userToken",
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Now().Add(-1 * time.Hour),
+			HttpOnly: true,
+		})
+		http.Redirect(w, r, "/index.html", http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/verify-email", func(w http.ResponseWriter, r *http.Request) {
+		controllers.VerifyEmail(db, w, r)
+	})
 
 	http.HandleFunc("/get", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -226,6 +307,6 @@ func main() {
 }
 
 func serveHTML(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "frontend/admin.html")
+	http.ServeFile(w, r, "static/index.html")
 	logger.Info("Admin HTML served")
 }

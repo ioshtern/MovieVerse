@@ -36,21 +36,21 @@
     </style>
 </head>
 <body>
-    <header class="bg-dark py-3">
-        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-            <div class="container-fluid">
-                <a class="navbar-brand fw-bold" href="index.html">MovieVerse</a>
-                <div class="navbar-collapse" id="navbarNav">
-                    <form class=" me-3 mx-auto" role="search">
-                        <input class="form-control me-2" type="search" placeholder="Search..." aria-label="Search">
-                    </form>
-                    <button class="btn btn-outline-light" type="submit">Search</button>
-                    <a href="login.html" class="btn btn-outline-light ms-2">Login</a>
-                    <a href="signup.html" class="btn btn-outline-light ms-2">Sign Up</a>
-                </div>
+<header class="bg-dark py-3">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="index.html">MovieVerse</a>
+            <div class="navbar-collapse" id="navbarNav">
+                <form class="me-3 mx-auto" role="search">
+                    <input class="form-control me-2" type="search" placeholder="Search..." aria-label="Search">
+                </form>
+                <button class="btn btn-outline-light" type="submit">Search</button>
+                <a href="login.html" class="btn btn-outline-light ms-2">Login</a>
+                <a href="signup.html" class="btn btn-outline-light ms-2">Sign Up</a>
             </div>
-        </nav>
-    </header>
+        </div>
+    </nav>
+</header>
     <section class="banner position-relative">
         <div class="banner-overlay"></div>
         <div class="banner-content text-center text-white p-5">
@@ -145,6 +145,54 @@
             <a class="text-decoration-none text-white" href="https://t.me/userd0666"><i class="fab fa-telegram"></i>Telegram</a>
         </div>
     </footer>
-    <script src="scripts/main.js"></script>
+    <script>
+        // scripts/main.js
+
+        // Helper function to get a cookie by name
+        function getCookie(name) {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [key, value] = cookie.split('=').map(c => c.trim());
+                if (key === name) return value;
+            }
+            return null;
+        }
+
+        // Show/Hide buttons based on user login state
+        function updateNavButtons() {
+            const loginButton = document.querySelector('a[href="login.html"]');
+            const signupButton = document.querySelector('a[href="signup.html"]');
+            const logoutButton = document.createElement('button');
+
+            // Check if userToken cookie exists
+            const userToken = getCookie('userToken');
+            if (userToken) {
+                // User is logged in
+                loginButton.style.display = 'none';
+                signupButton.style.display = 'none';
+
+                // Add Logout button
+                logoutButton.textContent = 'Logout';
+                logoutButton.classList.add('btn', 'btn-outline-light', 'ms-2');
+                logoutButton.addEventListener('click', () => {
+                    // Remove the cookie and reload the page
+                    document.cookie = 'userToken=; Max-Age=0; path=/';
+                    window.location.reload();
+                });
+                loginButton.parentNode.appendChild(logoutButton);
+            } else {
+                // User is not logged in
+                loginButton.style.display = '';
+                signupButton.style.display = '';
+                if (logoutButton.parentNode) {
+                    logoutButton.parentNode.removeChild(logoutButton);
+                }
+            }
+        }
+
+        // Run on page load
+        document.addEventListener('DOMContentLoaded', updateNavButtons);
+
+    </script>
 </body>
 </html>
