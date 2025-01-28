@@ -47,6 +47,8 @@
                 <button class="btn btn-outline-light" type="submit">Search</button>
                 <a href="login.html" class="btn btn-outline-light ms-2">Login</a>
                 <a href="signup.html" class="btn btn-outline-light ms-2">Sign Up</a>
+                <a href="index.html" class="btn btn-outline-light ms-2"  id="adminLink" style="display: none;">Log Out</a>
+
             </div>
         </div>
     </nav>
@@ -162,26 +164,16 @@
         function updateNavButtons() {
             const loginButton = document.querySelector('a[href="login.html"]');
             const signupButton = document.querySelector('a[href="signup.html"]');
-            const logoutButton = document.createElement('button');
+            const logoutButton = document.getElementById("adminLink");
 
-            // Check if userToken cookie exists
             const userToken = getCookie('userToken');
             if (userToken) {
-                // User is logged in
                 if (loginButton) loginButton.style.display = 'none';
                 if (signupButton) signupButton.style.display = 'none';
 
-                // Add Logout button
-                logoutButton.textContent = 'Logout';
-                logoutButton.classList.add('btn', 'btn-outline-light', 'ms-2');
-                logoutButton.addEventListener('click', () => {
-                    // Remove the cookie and reload the page
-                    document.cookie = 'userToken=; Max-Age=0; path=/';
-                    window.location.reload();
-                });
-                if (loginButton) loginButton.parentNode.appendChild(logoutButton);
+
+                if (loginButton) logoutButton.style.display='';
             } else {
-                // User is not logged in
                 if (loginButton) loginButton.style.display = '';
                 if (signupButton) signupButton.style.display = '';
                 if (logoutButton.parentNode) {

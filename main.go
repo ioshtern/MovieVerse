@@ -164,24 +164,19 @@ func main() {
 			logger.Warn("Invalid request method for /post endpoint")
 		}
 	}))
-	// Endpoint for serving the main page
 	http.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
-		// Check if the user is logged in by verifying the session or token
 		cookie, err := r.Cookie("userToken")
 		if err != nil || cookie.Value == "" {
-			// If not logged in, serve the page as-is
 			http.ServeFile(w, r, "static/index.html")
 			return
 		}
 
-		// If logged in, modify the page to remove login and sign-up buttons
 		page, err := os.ReadFile("static/index.html")
 		if err != nil {
 			http.Error(w, "Unable to load the main page", http.StatusInternalServerError)
 			return
 		}
 
-		// Replace the buttons with an empty string
 		updatedPage := strings.ReplaceAll(string(page), `<a href="login.html" class="btn btn-outline-light ms-2">Login</a>`, "")
 		updatedPage = strings.ReplaceAll(updatedPage, `<a href="signup.html" class="btn btn-outline-light ms-2">Sign Up</a>`, "")
 
@@ -190,7 +185,6 @@ func main() {
 		w.Write([]byte(updatedPage))
 	})
 
-	// Serve static HTML files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	http.HandleFunc("/signup.html", func(w http.ResponseWriter, r *http.Request) {
@@ -198,34 +192,53 @@ func main() {
 	})
 	http.HandleFunc("/login.html", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/login.html")
-	})
 
-	http.HandleFunc("/signup", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
+	})
+	http.HandleFunc("/admin.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/admin.html")
+
+	})
+	http.Handle("/signup", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			controllers.CreateUser(db, w, r)
 		default:
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
-	}))
-	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+	})))
+
+	http.Handle("/login", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			controllers.LoginUser(db, w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	})))
+	http.Handle("/index", controllers.ValidateJWT(http.HandlerFunc(controllers.ProtectedHandler)))
+
+	http.HandleFunc("/admin.html", func(w http.ResponseWriter, r *http.Request) {
+		controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, "static/admin.html")
+		})))(w, r)
 	})
 
-	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "userToken",
-			Value:    "",
-			Path:     "/",
-			Expires:  time.Now().Add(-1 * time.Hour),
-			HttpOnly: true,
-		})
-		http.Redirect(w, r, "/index.html", http.StatusSeeOther)
-	})
+	http.Handle("/logout", controllers.ValidateJWT(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			// Clear the user's JWT token cookie
+			http.SetCookie(w, &http.Cookie{
+				Name:     "userToken",
+				Value:    "",
+				Path:     "/",
+				Expires:  time.Now().Add(-1 * time.Hour),
+				HttpOnly: true,
+				Secure:   true, // Set to true if running on HTTPS
+				SameSite: http.SameSiteStrictMode,
+			})
+			http.Redirect(w, r, "/index.html", http.StatusSeeOther)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
 
 	http.HandleFunc("/verify-email", func(w http.ResponseWriter, r *http.Request) {
 		controllers.VerifyEmail(db, w, r)

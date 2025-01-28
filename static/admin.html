@@ -3,34 +3,248 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <title>Admin Page - Manage Users</title>
+    <title>MovieVerse API</title>
     <style>
         body {
-            font-family: 'Roboto', sans-serif;
-            background-color: #f7f7f7;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
         }
-        .container {
-            margin-top: 20px;
+        button, input, textarea {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
         }
-        .action-buttons {
-            margin-top: 10px;
+        h1, h2 {
+            color: #333;
+        }
+        form {
+            display: inline-block;
+            margin: 20px auto;
+            text-align: left;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px #ddd;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+        }
+        #response-container {
+            margin: 20px auto;
+            max-width: 80%;
+            overflow-x: auto;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px #ddd;
+            padding: 10px;
+        }
+        #response-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #response-table th, #response-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        #response-table th {
+            background-color: #f4f4f4;
+            font-weight: bold;
+        }
+        #response-table tr:nth-child(even) {
+            background-color: #f9f9f9;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="my-4">Admin Page - Manage Users</h1>
-        <button id="logoutButton" class="btn btn-danger mb-3">Logout</button>
-        <ul id="reviewList" class="list-group">
-        </ul>
-    </div>
-    <div class="container mt-5">
-        <h2>Registered Users</h2>
-        <ul id="userList" class="list-group">
-        </ul>
-    </div>
-    
-    <script src="scripts/admin.js"></script>
+<h1>MovieVerse API Operations</h1>
+
+<h2>Movies</h2>
+
+<h2>Response</h2>
+<div id="response-container">
+    <table id="response-table">
+        <tbody id="response-body"></tbody>
+    </table>
+</div>
+<pre id="response"></pre>
+<button onclick="getMovies()">Get All Movies</button>
+
+<h3>Get Movie by ID</h3>
+<form id="getMovieByIDForm" onsubmit="getMovieByID(event)">
+    <label for="movieID">Movie ID:</label>
+    <input type="text" id="movieID" name="movieID" required>
+    <button type="submit">Get Movie</button>
+</form>
+
+<h3>Delete Movie</h3>
+<form id="deleteMovieForm" onsubmit="deleteMovie(event)">
+    <label for="deleteMovieID">Movie ID:</label>
+    <input type="text" id="deleteMovieID" name="deleteMovieID" required>
+    <button type="submit">Delete Movie</button>
+</form>
+
+<h3>Create Movie</h3>
+<form id="createMovieForm" onsubmit="createMovie(event)">
+    <label for="title">Title:</label>
+    <input type="text" id="title" name="title" required>
+
+    <label for="director">Director:</label>
+    <input type="text" id="director" name="director" required>
+
+    <label for="country">Country:</label>
+    <input type="text" id="country" name="country" required>
+
+    <label for="genres">Genres (comma-separated):</label>
+    <input type="text" id="genres" name="genres" required>
+
+    <label for="releaseYear">Release Year:</label>
+    <input type="number" id="releaseYear" name="releaseYear" required>
+
+    <label for="description">Description:</label>
+    <textarea id="description" name="description" rows="3" required></textarea>
+
+    <button type="submit">Create Movie</button>
+</form>
+
+<h2>Users</h2>
+
+<button onclick="getAllUsers()">Get All Users</button>
+
+<h3>Get User by ID</h3>
+<form id="getUserByIDForm" onsubmit="getUserByID(event)">
+    <label for="userID">User ID:</label>
+    <input type="text" id="userID" name="userID" required>
+    <button type="submit">Get User</button>
+</form>
+
+<h3>Delete User</h3>
+<form id="deleteUserForm" onsubmit="deleteUser(event)">
+    <label for="deleteUserID">User ID:</label>
+    <input type="text" id="deleteUserID" name="deleteUserID" required>
+    <button type="submit">Delete User</button>
+</form>
+
+
+
+<script>
+    const apiUrl = 'http://localhost:8080';
+
+    const showResponse = (response) => {
+        const responseBody = document.getElementById('response-body');
+        responseBody.innerHTML = "";
+
+        if (Array.isArray(response)) {
+
+            const headerRow = document.createElement('tr');
+            if (response.length > 0) {
+                const firstItem = response[0];
+                for (const key in firstItem) {
+                    const th = document.createElement('th');
+                    th.textContent = key;
+                    headerRow.appendChild(th);
+                }
+                responseBody.appendChild(headerRow);
+
+                response.forEach(item => {
+                    const row = document.createElement('tr');
+                    for (const key in item) {
+                        const cell = document.createElement('td');
+                        const value = Array.isArray(item[key]) ? item[key].join(", ") : item[key];
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    }
+                    responseBody.appendChild(row);
+                });
+            }
+        } else {
+            const headerRow = document.createElement('tr');
+            for (const key in response) {
+                const th = document.createElement('th');
+                th.textContent = key;
+                headerRow.appendChild(th);
+            }
+            responseBody.appendChild(headerRow);
+
+            const row = document.createElement('tr');
+            for (const key in response) {
+                const cell = document.createElement('td');
+                const value = Array.isArray(response[key]) ? response[key].join(", ") : response[key];
+                cell.textContent = value;
+                row.appendChild(cell);
+            }
+            responseBody.appendChild(row);
+        }
+    };
+
+    function getMovies() {
+        fetch(`${apiUrl}/movies`)
+            .then(res => res.json())
+            .then(showResponse)
+            .catch(console.error);
+    }
+
+    function getMovieByID(event) {
+        event.preventDefault();
+        const id = document.getElementById("movieID").value;
+        fetch(`${apiUrl}/movies?id=${id}`)
+            .then(res => res.json())
+            .then(showResponse)
+            .catch(console.error);
+    }
+
+    function createMovie(event) {
+        event.preventDefault();
+        const formData = {
+            title: document.getElementById("title").value,
+            director: document.getElementById("director").value,
+            country: document.getElementById("country").value,
+            genres: document.getElementById("genres").value.split(","),
+            release_year: parseInt(document.getElementById("releaseYear").value),
+            description: document.getElementById("description").value,
+        };
+
+        fetch(`${apiUrl}/movies`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(formData),
+        }).then(res => res.json()).then(showResponse).catch(console.error);
+    }
+
+    function deleteMovie(event) {
+        event.preventDefault();
+        const id = document.getElementById("deleteMovieID").value;
+        fetch(`${apiUrl}/movies?id=${id}`, {
+            method: "DELETE",
+        }).then(res => res.json()).then(showResponse).catch(console.error);
+    }
+
+    function getAllUsers() {
+        fetch(`${apiUrl}/users`)
+            .then(res => res.json())
+            .then(showResponse)
+            .catch(console.error);
+    }
+
+    function getUserByID(event) {
+        event.preventDefault();
+        const id = document.getElementById("userID").value;
+        fetch(`${apiUrl}/users?id=${id}`)
+            .then(res => res.json())
+            .then(showResponse)
+            .catch(console.error);
+    }
+
+    function deleteUser(event) {
+        event.preventDefault();
+        const id = document.getElementById("deleteUserID").value;
+        fetch(`${apiUrl}/users?id=${id}`, {
+            method: "DELETE",
+        }).then(res => res.json()).then(showResponse).catch(console.error);
+    }
+</script>
 </body>
 </html>
