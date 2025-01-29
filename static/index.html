@@ -147,43 +147,51 @@
             <a class="text-decoration-none text-white" href="https://t.me/userd0666"><i class="fab fa-telegram"></i>Telegram</a>
         </div>
     </footer>
-    <script>
-        // scripts/main.js
-
-        // Helper function to get a cookie by name
-        function getCookie(name) {
-            const cookies = document.cookie.split(';');
-            for (let cookie of cookies) {
-                const [key, value] = cookie.split('=').map(c => c.trim());
-                if (key === name) return value;
-            }
-            return null;
+<script>
+    // Helper function to get a cookie by name
+    function getCookie(name) {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [key, value] = cookie.split('=').map(c => c.trim());
+            if (key === name) return value;
         }
+        return null;
+    }
 
-        // Show/Hide buttons based on user login state
-        function updateNavButtons() {
-            const loginButton = document.querySelector('a[href="login.html"]');
-            const signupButton = document.querySelector('a[href="signup.html"]');
-            const logoutButton = document.getElementById("adminLink");
+    // Helper function to delete a cookie by name
+    function deleteCookie(name) {
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict; Secure`;
+    }
 
-            const userToken = getCookie('userToken');
-            if (userToken) {
-                if (loginButton) loginButton.style.display = 'none';
-                if (signupButton) signupButton.style.display = 'none';
+    // Function to handle the logout process
+    function handleLogout() {
+        deleteCookie('userToken'); // Clear the token cookie
+        alert('You have been logged out.');
+        window.location.href = 'login.html'; // Redirect to login page
+    }
 
+    function updateNavButtons() {
+        const loginButton = document.querySelector('a[href="login.html"]');
+        const signupButton = document.querySelector('a[href="signup.html"]');
+        const logoutButton = document.getElementById("adminLink");
 
-                if (loginButton) logoutButton.style.display='';
-            } else {
-                if (loginButton) loginButton.style.display = '';
-                if (signupButton) signupButton.style.display = '';
-                if (logoutButton.parentNode) {
-                    logoutButton.parentNode.removeChild(logoutButton);
-                }
+        const userToken = getCookie('userToken');
+        if (userToken) {
+            if (loginButton) loginButton.style.display = 'none';
+            if (signupButton) signupButton.style.display = 'none';
+            if (logoutButton) {
+                logoutButton.style.display = '';
+                logoutButton.addEventListener('click', handleLogout); // Attach the logout handler
             }
+        } else {
+            if (loginButton) loginButton.style.display = '';
+            if (signupButton) signupButton.style.display = '';
+            if (logoutButton) logoutButton.style.display = 'none';
         }
+    }
 
-        // Run on page load
-        document.addEventListener('DOMContentLoaded', updateNavButtons);
-    </script>
+    document.addEventListener('DOMContentLoaded', updateNavButtons);
+</script>
+
 </body>
 </html>

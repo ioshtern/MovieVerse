@@ -194,10 +194,7 @@ func main() {
 		http.ServeFile(w, r, "static/login.html")
 
 	})
-	http.HandleFunc("/admin.html", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "static/admin.html")
 
-	})
 	http.Handle("/signup", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -216,11 +213,9 @@ func main() {
 	})))
 	http.Handle("/index", controllers.ValidateJWT(http.HandlerFunc(controllers.ProtectedHandler)))
 
-	http.HandleFunc("/admin.html", func(w http.ResponseWriter, r *http.Request) {
-		controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, "static/admin.html")
-		})))(w, r)
-	})
+	http.Handle("/admin.html", controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/admin.html")
+	}))))
 
 	http.Handle("/logout", controllers.ValidateJWT(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -330,6 +325,6 @@ func main() {
 }
 
 func serveHTML(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "static/index.html")
+	http.ServeFile(w, r, "static/login.html")
 	logger.Info("Admin HTML served")
 }

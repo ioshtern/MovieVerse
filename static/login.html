@@ -12,62 +12,66 @@
     </style>
 </head>
 <body>
-    <div class="container border rounded-5 mt-5 p-5 bg-secondary">
-        <a class="text-decoration-none text-dark" href="index.html">
-            <h2 class="mt-5 text-center">MovieVerse - Login</h2>
-        </a>
-        <form class="mt-4" id="loginForm">
-            <div class="mb-3">
-                <label for="email" class="form-label">Email address:</label>
-                <input type="email" class="form-control" id="email" placeholder="Enter email" required>
-            </div>
-            <div class="mb-3">
-                <label for="password" class="form-label">Password:</label>
-                <input type="password" class="form-control" id="password" placeholder="Enter password" required>
-            </div>
-            <button type="submit" class="btn btn-dark btn-block" id="loginButton">Login</button>
-        </form>
-        <div class="text-center mt-3">
-            <p>Don't have an account? <a class="text-dark" href="signup.html">Sign up</a></p>
+<div class="container border rounded-5 mt-5 p-5 bg-secondary">
+    <a class="text-decoration-none text-dark" href="index.html">
+        <h2 class="mt-5 text-center">MovieVerse - Login</h2>
+    </a>
+    <form class="mt-4" id="loginForm">
+        <div class="mb-3">
+            <label for="email" class="form-label">Email address:</label>
+            <input type="email" class="form-control" id="email" placeholder="Enter email" required>
         </div>
+        <div class="mb-3">
+            <label for="password" class="form-label">Password:</label>
+            <input type="password" class="form-control" id="password" placeholder="Enter password" required>
+        </div>
+        <button type="submit" class="btn btn-dark btn-block" id="loginButton">Login</button>
+    </form>
+    <div class="text-center mt-3">
+        <p>Don't have an account? <a class="text-dark" href="signup.html">Sign up</a></p>
     </div>
-    <script>
-        document.getElementById("loginForm").addEventListener("submit", async function (event) {
-            event.preventDefault();
+</div>
 
-            const email = document.getElementById("email").value;
-            const password = document.getElementById("password").value;
+<script>
+    function setCookie(name, value, days) {
+        const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+        document.cookie = `${name}=${value}; expires=${expires}; path=/; HttpOnly`;
+    }
 
-            try {
-                const response = await fetch("/login", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ email, password }),
-                });
+    document.getElementById("loginForm").addEventListener("submit", async function (event) {
+        event.preventDefault();
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText.trim());
-                }
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
 
-                const data = await response.json();
-                document.cookie = `userToken=${data.token}; path=/`;
-                if (data.admin){
-                    window.location.href="admin.html"
-                }
-                else{
-                    window.location.href = "index.html";
-                }
-            } catch (error) {
-                console.error("Error:", error.message);
-                alert(error.message);
+        try {
+            const response = await fetch("/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, password }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText.trim());
             }
-        });
 
-    </script>
-    
-    
+            const data = await response.json();
+
+            setCookie("userToken", data.token, 7);
+
+            if (data.admin) {
+                window.location.href = "admin.html";
+            } else {
+                window.location.href = "index.html";
+            }
+        } catch (error) {
+            console.error("Error:", error.message);
+            alert("Login failed: " + error.message);
+        }
+    });
+</script>
 </body>
 </html>

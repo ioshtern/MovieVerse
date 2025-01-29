@@ -150,7 +150,6 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// LoginUser handles user login and issues a JWT
 func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 	var credentials struct {
 		Email    string `json:"email"`
@@ -162,7 +161,6 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query the user from the database
 	var user models.User
 	if err := db.Where("email = ?", credentials.Email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -174,13 +172,11 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the provided password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password)); err != nil {
 		respondWithError(w, http.StatusUnauthorized, "Invalid email or password")
 		return
 	}
 
-	// Create a JWT token for the user
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
 		UserID: user.ID,
@@ -197,7 +193,6 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Respond with the token
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Login successful",
