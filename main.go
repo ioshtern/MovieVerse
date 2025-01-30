@@ -4,6 +4,7 @@ import (
 	"MovieVerse/controllers"
 	"MovieVerse/models"
 	"encoding/json"
+	"fmt"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
@@ -12,9 +13,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"path/filepath"
+	"reflect"
 	"sync"
 	"time"
+	"unsafe"
 )
 
 var (
@@ -28,6 +31,20 @@ type RateLimiter struct {
 	mutex   sync.Mutex
 }
 
+func printRegisteredRoutes(mux *http.ServeMux) {
+	// Получаем значение приватного поля `m` (map маршрутов) у DefaultServeMux
+	muxValue := reflect.ValueOf(mux).Elem()
+	field := muxValue.FieldByName("m")
+
+	if field.IsValid() {
+		field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+		for _, key := range field.MapKeys() {
+			fmt.Println("Маршрут:", key.String())
+		}
+	} else {
+		fmt.Println("Не удалось получить маршруты")
+	}
+}
 func NewRateLimiter(rps int, burst int) *RateLimiter {
 	return &RateLimiter{
 		limiter: rate.NewLimiter(rate.Limit(rps), burst),
@@ -43,7 +60,6 @@ func (rl *RateLimiter) Allow() bool {
 func rateLimitedHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rlimiter.Allow() {
-			// Set headers for the response
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusTooManyRequests) // Set status code first
 
@@ -148,13 +164,24 @@ func main() {
 
 	rlimiter = NewRateLimiter(1, 1)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" && r.Method == http.MethodGet {
-			serveHTML(w, r)
+	http.Handle("/index.html", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("userToken")
+		if err != nil || cookie.Value == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "You are not logged in",
+			})
 			return
 		}
-		respondWithError(w, http.StatusNotFound, "Endpoint not found")
-	})
+
+		absPath, err := filepath.Abs("D:\\AssignemntOne - Go\\MovieVerse\\static\\index.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+		http.ServeFile(w, r, absPath)
+	}))
 
 	http.HandleFunc("/post", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -164,37 +191,21 @@ func main() {
 			logger.Warn("Invalid request method for /post endpoint")
 		}
 	}))
-	http.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("userToken")
-		if err != nil || cookie.Value == "" {
-			http.ServeFile(w, r, "static/index.html")
-			return
-		}
-
-		page, err := os.ReadFile("static/index.html")
-		if err != nil {
-			http.Error(w, "Unable to load the main page", http.StatusInternalServerError)
-			return
-		}
-
-		updatedPage := strings.ReplaceAll(string(page), `<a href="login.html" class="btn btn-outline-light ms-2">Login</a>`, "")
-		updatedPage = strings.ReplaceAll(updatedPage, `<a href="signup.html" class="btn btn-outline-light ms-2">Sign Up</a>`, "")
-
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(updatedPage))
-	})
-
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	http.HandleFunc("/signup.html", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/signup.html")
 	})
 	http.HandleFunc("/login.html", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/login.html")
-
 	})
 
+	http.Handle("/login", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			controllers.LoginUser(db, w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
 	http.Handle("/signup", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -204,22 +215,11 @@ func main() {
 		}
 	})))
 
-	http.Handle("/login", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			controllers.LoginUser(db, w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})))
-	http.Handle("/index", controllers.ValidateJWT(http.HandlerFunc(controllers.ProtectedHandler)))
-
 	http.Handle("/admin.html", controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/admin.html")
 	}))))
-
 	http.Handle("/logout", controllers.ValidateJWT(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			// Clear the user's JWT token cookie
 			http.SetCookie(w, &http.Cookie{
 				Name:     "userToken",
 				Value:    "",
@@ -229,11 +229,12 @@ func main() {
 				Secure:   true, // Set to true if running on HTTPS
 				SameSite: http.SameSiteStrictMode,
 			})
-			http.Redirect(w, r, "/index.html", http.StatusSeeOther)
+			http.Redirect(w, r, "/login.html", http.StatusSeeOther)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	http.HandleFunc("/verify-email", func(w http.ResponseWriter, r *http.Request) {
 		controllers.VerifyEmail(db, w, r)
@@ -317,6 +318,9 @@ func main() {
 			logger.Warn("Invalid request method for /reviews endpoint")
 		}
 	}))
+	fmt.Println("Зарегистрированные маршруты:")
+	printRegisteredRoutes(http.DefaultServeMux)
+	fmt.Println("Сервер запущен на порту 8080...")
 
 	logger.Info("Server is running on port 8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

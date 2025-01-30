@@ -35,7 +35,7 @@
 <script>
     function setCookie(name, value, days) {
         const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
-        document.cookie = `${name}=${value}; expires=${expires}; path=/; HttpOnly`;
+        document.cookie = `${name}=${value}; expires=${expires}; path=/`;
     }
 
     document.getElementById("loginForm").addEventListener("submit", async function (event) {
@@ -53,20 +53,27 @@
                 body: JSON.stringify({ email, password }),
             });
 
+            console.log("Response status:", response.status); // Log the status code
+            console.log("Response headers:", response.headers); // Log the headers
+
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error("Error response:", errorText); // Log the error response
                 throw new Error(errorText.trim());
             }
 
             const data = await response.json();
+            console.log("Response data:", data);
 
             setCookie("userToken", data.token, 7);
 
+            console.log("Admin status:", data.admin);
             if (data.admin) {
-                window.location.href = "admin.html";
+                window.location.href = window.location.protocol + "//" + window.location.host + "/admin.html?token=" + encodeURIComponent(data.token);
             } else {
-                window.location.href = "index.html";
+                window.location.href = window.location.protocol + "//" + window.location.host + "/index.html?token=" + encodeURIComponent(data.token);
             }
+
         } catch (error) {
             console.error("Error:", error.message);
             alert("Login failed: " + error.message);

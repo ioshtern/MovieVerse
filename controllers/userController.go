@@ -143,7 +143,6 @@ func sendVerificationEmail(email, token string) error {
 
 var jwtKey = []byte("your_secret_key")
 
-// Claims structure for JWT tokens
 type Claims struct {
 	UserID uint `json:"userId"`
 	Admin  bool `json:"admin"`
@@ -197,13 +196,18 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Login successful",
 		"token":   tokenString,
+		"admin":   user.Admin,
 	})
 }
 
 func ValidateJWT(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get the Authorization header
+		// Get the token from the Authorization header or query parameters
 		tokenStr := r.Header.Get("Authorization")
+		if tokenStr == "" {
+			tokenStr = r.URL.Query().Get("token")
+		}
+
 		if tokenStr == "" {
 			http.Error(w, "Missing token", http.StatusUnauthorized)
 			return
@@ -229,9 +233,26 @@ func ValidateJWT(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+func ServeIndex(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value("user").(*Claims)
+	if !ok {
+		http.Error(w, "Access denied: Please log in", http.StatusUnauthorized)
+		return
+	}
+	log.Printf("User %d accessed index.html", claims.UserID)
+	http.ServeFile(w, r, "D:\\AssignemntOne - Go\\MovieVerse\\static\\index.html")
+}
+func ServeAdmin(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value("user").(*Claims)
+	if !ok || !claims.Admin {
+		http.Error(w, "Access denied: Admins only", http.StatusForbidden)
+		return
+	}
+
+	http.ServeFile(w, r, "D:\\AssignemntOne - Go\\MovieVerse\\static\\admin.html")
+}
 func AdminOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract user claims from the context
 		claims, ok := r.Context().Value("user").(*Claims)
 		if !ok || !claims.Admin {
 			http.Error(w, "Access denied: Admins only", http.StatusForbidden)
