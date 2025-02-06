@@ -207,7 +207,7 @@ func main() {
 				Path:     "/",
 				Expires:  time.Now().Add(-1 * time.Hour),
 				HttpOnly: true,
-				Secure:   true, // Set to true if running on HTTPS
+				Secure:   true,
 				SameSite: http.SameSiteStrictMode,
 			})
 			http.Redirect(w, r, "/login.html", http.StatusSeeOther)

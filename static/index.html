@@ -45,10 +45,7 @@
                     <input class="form-control me-2" type="search" placeholder="Search..." aria-label="Search">
                 </form>
                 <button class="btn btn-outline-light" type="submit">Search</button>
-                <a href="login.html" class="btn btn-outline-light ms-2">Login</a>
-                <a href="signup.html" class="btn btn-outline-light ms-2">Sign Up</a>
-                <a href="index.html" class="btn btn-outline-light ms-2"  id="adminLink" style="display: none;">Log Out</a>
-
+                <a href="#" class="btn btn-outline-light ms-2" id="logoutButton" onclick="handleLogout()">Log Out</a>
             </div>
         </div>
     </nav>
@@ -159,11 +156,30 @@
         }
     });
 
-    function handleLogout() {
-        localStorage.removeItem('userToken'); // Clear token from localStorage
-        alert('You have been logged out.');
-        window.location.href = 'login.html';
+    async function handleLogout() {
+        try {
+            const response = await fetch("/logout", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + localStorage.getItem("userToken"),
+                },
+            });
+
+            if (response.ok) {
+                // Clear token from localStorage
+                localStorage.removeItem('userToken');
+                alert('You have been logged out.');
+                window.location.href = 'login.html';
+            } else {
+                alert('Logout failed: ' + response.statusText);
+            }
+        } catch (error) {
+            console.error("Error during logout:", error);
+            alert("Logout failed. Please try again.");
+        }
     }
+
+
 </script>
 
 </body>
