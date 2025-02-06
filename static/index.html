@@ -148,83 +148,22 @@
         </div>
     </footer>
 <script>
-    function getCookie(name) {
-        const cookies = document.cookie.split(';');
-        for (let cookie of cookies) {
-            const [key, value] = cookie.split('=').map(c => c.trim());
-            if (key === name) return value;
-        }
-        return null;
-    }
-
-    // Helper function to delete a cookie by name
-    function deleteCookie(name) {
-        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict; Secure`;
-    }
-
-    // Function to handle the logout process
-    function handleLogout() {
-        deleteCookie('userToken'); // Clear the token cookie
-        alert('You have been logged out.');
-        window.location.href = 'login.html'; // Redirect to login page
-    }
-
-    function updateNavButtons() {
-        const loginButton = document.querySelector('a[href="login.html"]');
-        const signupButton = document.querySelector('a[href="signup.html"]');
-        const logoutButton = document.getElementById("adminLink");
-
-        const userToken = getCookie('userToken');
-        if (userToken) {
-            if (loginButton) loginButton.style.display = 'none';
-            if (signupButton) signupButton.style.display = 'none';
-            if (logoutButton) {
-                logoutButton.style.display = '';
-                logoutButton.addEventListener('click', handleLogout); // Attach the logout handler
-            }
-        } else {
-            if (loginButton) loginButton.style.display = '';
-            if (signupButton) signupButton.style.display = '';
-            if (logoutButton) logoutButton.style.display = 'none';
-        }
-    }
-
-    // Add the fetch snippet here
     document.addEventListener('DOMContentLoaded', () => {
-        // Get the token from the cookie
-        const token = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('userToken='))
-            ?.split('=')[1];
-
-        if (!token) {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get("token");
+        if (token) {
+            localStorage.setItem("userToken", token);
+        } else {
+            alert("Token missing or expired. Redirecting to login...");
             window.location.href = "/login.html";
-            return;
         }
-
-        fetch("/index.html", {
-            headers: {
-                "Authorization": `Bearer ${token}`,
-            },
-        })
-            .then(response => {
-                if (!response.ok) {
-                    if (response.status === 401 || response.status === 403) {
-                        window.location.href = "/login.html"; // Redirect to login page
-                    }
-                    throw new Error("Access denied");
-                }
-                return response.text();
-            })
-            .then(html => {
-                document.body.innerHTML = html; // Render the protected page
-            })
-            .catch(error => {
-                console.error("Error:", error);
-            });
-
-        updateNavButtons();
     });
+
+    function handleLogout() {
+        localStorage.removeItem('userToken'); // Clear token from localStorage
+        alert('You have been logged out.');
+        window.location.href = 'login.html';
+    }
 </script>
 
 </body>

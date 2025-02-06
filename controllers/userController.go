@@ -154,12 +154,10 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
-
 	var user models.User
 	if err := db.Where("email = ?", credentials.Email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -170,12 +168,10 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password)); err != nil {
 		respondWithError(w, http.StatusUnauthorized, "Invalid email or password")
 		return
 	}
-
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
 		UserID: user.ID,
@@ -191,7 +187,6 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Failed to generate token")
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Login successful",
@@ -202,23 +197,17 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 
 func ValidateJWT(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get the token from the Authorization header or query parameters
 		tokenStr := r.Header.Get("Authorization")
 		if tokenStr == "" {
 			tokenStr = r.URL.Query().Get("token")
 		}
-
 		if tokenStr == "" {
 			http.Error(w, "Missing token", http.StatusUnauthorized)
 			return
 		}
-
-		// Strip "Bearer " prefix if present
 		if len(tokenStr) > 7 && tokenStr[:7] == "Bearer " {
 			tokenStr = tokenStr[7:]
 		}
-
-		// Parse and validate the token
 		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
 			return jwtKey, nil
@@ -227,29 +216,9 @@ func ValidateJWT(next http.Handler) http.Handler {
 			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
-
-		// Add claims to the request context
 		ctx := context.WithValue(r.Context(), "user", claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-func ServeIndex(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*Claims)
-	if !ok {
-		http.Error(w, "Access denied: Please log in", http.StatusUnauthorized)
-		return
-	}
-	log.Printf("User %d accessed index.html", claims.UserID)
-	http.ServeFile(w, r, "D:\\AssignemntOne - Go\\MovieVerse\\static\\index.html")
-}
-func ServeAdmin(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*Claims)
-	if !ok || !claims.Admin {
-		http.Error(w, "Access denied: Admins only", http.StatusForbidden)
-		return
-	}
-
-	http.ServeFile(w, r, "D:\\AssignemntOne - Go\\MovieVerse\\static\\admin.html")
 }
 func AdminOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -261,7 +230,17 @@ func AdminOnly(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
+func UsersOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value("user").(*Claims)
+		if !ok {
+			http.Error(w, "Access denied: Users only", http.StatusForbidden)
+			return
+		}
+		print(claims.UserID)
+		next.ServeHTTP(w, r)
+	})
+}
 func ProtectedHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value("user").(*Claims)
 	if !ok {

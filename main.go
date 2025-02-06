@@ -4,7 +4,6 @@ import (
 	"MovieVerse/controllers"
 	"MovieVerse/models"
 	"encoding/json"
-	"fmt"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
@@ -14,10 +13,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sync"
 	"time"
-	"unsafe"
 )
 
 var (
@@ -31,20 +28,6 @@ type RateLimiter struct {
 	mutex   sync.Mutex
 }
 
-func printRegisteredRoutes(mux *http.ServeMux) {
-	// Получаем значение приватного поля `m` (map маршрутов) у DefaultServeMux
-	muxValue := reflect.ValueOf(mux).Elem()
-	field := muxValue.FieldByName("m")
-
-	if field.IsValid() {
-		field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-		for _, key := range field.MapKeys() {
-			fmt.Println("Маршрут:", key.String())
-		}
-	} else {
-		fmt.Println("Не удалось получить маршруты")
-	}
-}
 func NewRateLimiter(rps int, burst int) *RateLimiter {
 	return &RateLimiter{
 		limiter: rate.NewLimiter(rate.Limit(rps), burst),
@@ -163,25 +146,26 @@ func main() {
 	initDatabase()
 
 	rlimiter = NewRateLimiter(1, 1)
-
-	http.Handle("/index.html", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("userToken")
-		if err != nil || cookie.Value == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "You are not logged in",
-			})
-			return
-		}
-
+	http.Handle("/", controllers.ValidateJWT(controllers.UsersOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Serve index.html instead of redirecting
 		absPath, err := filepath.Abs("D:\\AssignemntOne - Go\\MovieVerse\\static\\index.html")
 		if err != nil {
 			log.Fatal(err)
 		}
 		http.ServeFile(w, r, absPath)
-	}))
+	}))))
+
+	http.Handle("/index.html", controllers.ValidateJWT(controllers.UsersOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		absPath, err := filepath.Abs("D:\\AssignemntOne - Go\\MovieVerse\\static\\index.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Handling request for: %s", r.URL.Path)
+		http.ServeFile(w, r, absPath)
+	}))))
+	http.Handle("/admin.html", controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/admin.html")
+	}))))
 
 	http.HandleFunc("/post", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -215,9 +199,6 @@ func main() {
 		}
 	})))
 
-	http.Handle("/admin.html", controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "static/admin.html")
-	}))))
 	http.Handle("/logout", controllers.ValidateJWT(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			http.SetCookie(w, &http.Cookie{
@@ -318,9 +299,6 @@ func main() {
 			logger.Warn("Invalid request method for /reviews endpoint")
 		}
 	}))
-	fmt.Println("Зарегистрированные маршруты:")
-	printRegisteredRoutes(http.DefaultServeMux)
-	fmt.Println("Сервер запущен на порту 8080...")
 
 	logger.Info("Server is running on port 8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
