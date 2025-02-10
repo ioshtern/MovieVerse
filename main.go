@@ -133,13 +133,6 @@ func handleGetRequest(w http.ResponseWriter, r *http.Request) {
 		Message: "GET request received",
 	})
 }
-func respondWithError(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]string{
-		"error": message,
-	})
-}
 
 func main() {
 	initLogger()
@@ -304,9 +297,4 @@ func main() {
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		logger.WithError(err).Fatal("Could not start server")
 	}
-}
-
-func serveHTML(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "static/login.html")
-	logger.Info("Admin HTML served")
 }
