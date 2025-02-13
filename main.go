@@ -370,7 +370,7 @@ func main() {
 	rlimiter = NewRateLimiter(1, 1)
 
 	http.Handle("/", controllers.ValidateJWT(controllers.UsersOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		absPath, err := filepath.Abs("C:\\Users\\alane\\GolandProjects\\MovieVerse\\static\\index.html")
+		absPath, err := filepath.Abs("static/index.html")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -378,7 +378,7 @@ func main() {
 	}))))
 
 	http.Handle("/index.html", controllers.ValidateJWT(controllers.UsersOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		absPath, err := filepath.Abs("C:\\Users\\alane\\GolandProjects\\MovieVerse\\static\\index.html")
+		absPath, err := filepath.Abs("static/index.html")
 		if err != nil {
 			log.Fatal(err)
 		}
