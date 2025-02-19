@@ -334,24 +334,30 @@ func logAction(fields logrus.Fields, message string) {
 	logger.WithFields(fields).Info(message)
 }
 
+var movieCollection *mongo.Collection
+
 func initDatabase() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
 	clientOptions := options.Client().ApplyURI(os.Getenv("MONGODB_URI"))
 	client, err = mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
 		log.Fatal("Failed to connect to MongoDB:", err)
 	}
+
 	err = client.Ping(context.TODO(), nil)
 	if err != nil {
 		log.Fatal("Failed to ping MongoDB:", err)
 	}
+
 	database = client.Database(os.Getenv("MONGODB_DATABASE"))
+	movieCollection = database.Collection("movies") // 🔥 Добавлено!
+
 	log.Println("Database connected successfully")
 }
-
 func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 	var input map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -390,6 +396,7 @@ func main() {
 	controllers.SetClient(client)
 	initLogger()
 	initDatabase()
+
 	rlimiter = NewRateLimiter(1, 1)
 
 	http.Handle("/", controllers.ValidateJWT(controllers.UsersOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -481,6 +488,21 @@ func main() {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			logger.Warn("Invalid request method for /get endpoint")
 		}
+	}))
+
+	http.HandleFunc("/movies", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			controllers.GetMovies(w, r)
+		} else if r.Method == http.MethodPost {
+			controllers.CreateMovie(w, r)
+		} else if r.Method == http.MethodPut {
+			controllers.UpdateMovie(w, r)
+		} else if r.Method == http.MethodDelete {
+			controllers.DeleteMovie(w, r)
+		} else {
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		}
+
 	}))
 
 	http.HandleFunc("/ws", handleConnections)

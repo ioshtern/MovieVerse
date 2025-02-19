@@ -2,150 +2,141 @@ package controllers
 
 import (
 	"MovieVerse/models"
+	"context"
 	"encoding/json"
-	"fmt"
-	"gorm.io/gorm"
-	"io/ioutil"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
 	"math"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 )
 
-func GetMovies(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	var movies []models.Movie
-	if err := db.Find(&movies).Error; err != nil {
+var movieCollection *mongo.Collection
+
+func InitMovieController(db *mongo.Database) {
+	movieCollection = db.Collection("movies")
+}
+
+// Get all movies
+func GetMovies(w http.ResponseWriter, r *http.Request) {
+	cursor, err := movieCollection.Find(context.TODO(), bson.M{})
+	if err != nil {
 		http.Error(w, "Failed to fetch movies", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(movies)
-	if err != nil {
+	defer cursor.Close(context.TODO())
+
+	var movies []models.Movie
+	if err = cursor.All(context.TODO(), &movies); err != nil {
+		http.Error(w, "Error decoding movies", http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(movies)
 }
-func GetMovieByID(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+
+// Get movie by ID
+func GetMovieByID(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "Movie ID is required", http.StatusBadRequest)
 		return
 	}
 
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		http.Error(w, "Invalid movie ID format", http.StatusBadRequest)
+		return
+	}
+
 	var movie models.Movie
-	if err := db.First(&movie, id).Error; err != nil {
+	err = movieCollection.FindOne(context.TODO(), bson.M{"_id": objID}).Decode(&movie)
+	if err == mongo.ErrNoDocuments {
 		http.Error(w, "Movie not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "Error retrieving movie", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(movie)
-	if err != nil {
-		return
-	}
+	json.NewEncoder(w).Encode(movie)
 }
-func CreateMovie(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+
+// Create new movie
+func CreateMovie(w http.ResponseWriter, r *http.Request) {
 	var movie models.Movie
-	var inputMap map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&movie); err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
 
-	body, err := ioutil.ReadAll(r.Body)
+	movie.ID = primitive.NewObjectID()
+	_, err := movieCollection.InsertOne(context.TODO(), movie)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-		return
-	}
-
-	if err := json.Unmarshal(body, &inputMap); err != nil {
-		http.Error(w, "Invalid attribute encountered", http.StatusInternalServerError)
-		return
-	}
-
-	if err := json.Unmarshal(body, &movie); err != nil {
-		http.Error(w, "Invalid data type", http.StatusBadRequest)
-		return
-	}
-
-	for key := range inputMap {
-		switch key {
-		case "title", "release_year", "genres", "director", "country", "description":
-		default:
-			http.Error(w, "Invalid attribute: "+key, http.StatusBadRequest)
-			return
-		}
-	}
-
-	if err := db.Create(&movie).Error; err != nil {
 		http.Error(w, "Failed to create movie", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(movie); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	json.NewEncoder(w).Encode(movie)
 }
-func UpdateMovie(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	var movie models.Movie
+
+func UpdateMovie(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "Movie ID is required", http.StatusBadRequest)
 		return
 	}
-	if err := db.First(&movie, id).Error; err != nil {
-		http.Error(w, "Movie not found", http.StatusNotFound)
+
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		http.Error(w, "Invalid movie ID format", http.StatusBadRequest)
 		return
 	}
-	var updatedMovie models.Movie
-	if err := json.NewDecoder(r.Body).Decode(&updatedMovie); err != nil {
+
+	var updatedData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updatedData); err != nil {
 		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
-	if updatedMovie.Title != "" {
-		movie.Title = updatedMovie.Title
-	}
-	if updatedMovie.Director != "" {
-		movie.Director = updatedMovie.Director
-	}
-	if updatedMovie.Country != "" {
-		movie.Country = updatedMovie.Country
-	}
-	if updatedMovie.ReleaseYear != 0 {
-		movie.ReleaseYear = updatedMovie.ReleaseYear
-	}
-	if updatedMovie.Description != "" {
-		movie.Description = updatedMovie.Description
-	}
-	if updatedMovie.Genres != nil {
-		movie.Genres = updatedMovie.Genres
-	}
 
-	if err := db.Save(&movie).Error; err != nil {
+	update := bson.M{"$set": updatedData}
+	_, err = movieCollection.UpdateOne(context.TODO(), bson.M{"_id": objID}, update)
+	if err != nil {
 		http.Error(w, "Failed to update movie", http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(movie); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	json.NewEncoder(w).Encode(map[string]string{"message": "Movie updated successfully"})
 }
-func DeleteMovie(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+func DeleteMovie(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "Movie ID is required", http.StatusBadRequest)
 		return
 	}
-	if err := db.Delete(&models.Movie{}, id).Error; err != nil {
+
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		http.Error(w, "Invalid movie ID format", http.StatusBadRequest)
+		return
+	}
+
+	_, err = movieCollection.DeleteOne(context.TODO(), bson.M{"_id": objID})
+	if err != nil {
 		http.Error(w, "Failed to delete movie", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(map[string]string{"message": "Movie deleted successfully"})
-	if err != nil {
-		return
-	}
+	json.NewEncoder(w).Encode(map[string]string{"message": "Movie deleted successfully"})
 }
 
 func init() {
@@ -158,12 +149,12 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile) // Include timestamp and file/line number
 }
 
-func GetMoviesWithFilters(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+func GetMoviesWithFilters(w http.ResponseWriter, r *http.Request) {
 	genres := r.URL.Query()["genres"]
 	countries := r.URL.Query()["country"]
 	yearFrom := r.URL.Query().Get("yearMin")
 	yearTo := r.URL.Query().Get("yearMax")
-	sort := r.URL.Query().Get("sort")
+	sortField := r.URL.Query().Get("sort")
 	order := r.URL.Query().Get("order")
 	pageStr := r.URL.Query().Get("page")
 	limitStr := r.URL.Query().Get("limit")
@@ -177,94 +168,86 @@ func GetMoviesWithFilters(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 		limit = 10
 	}
 
-	query := db.Model(&models.Movie{})
-
-	isFiltering := false
-	isSorting := sort != ""
-
+	// Построение фильтра запроса
+	filter := bson.M{}
 	if len(genres) > 0 {
-		isFiltering = true
-		genreFilter := fmt.Sprintf(`%s`, strings.Join(genres, `","`))
-		query = query.Where("genres::jsonb @> ?::jsonb", genreFilter)
+		filter["genres"] = bson.M{"$all": genres}
 	}
-
 	if len(countries) > 0 {
-		isFiltering = true
-		query = query.Where("country IN ?", countries)
+		filter["country"] = bson.M{"$in": countries}
 	}
-
 	if yearFrom != "" {
 		if yearFromInt, err := strconv.Atoi(yearFrom); err == nil {
-			isFiltering = true
-			query = query.Where("release_year >= ?", yearFromInt)
+			filter["release_year"] = bson.M{"$gte": yearFromInt}
 		}
 	}
 	if yearTo != "" {
 		if yearToInt, err := strconv.Atoi(yearTo); err == nil {
-			isFiltering = true
-			query = query.Where("release_year <= ?", yearToInt)
+			if val, exists := filter["release_year"]; exists {
+				filter["release_year"] = bson.M{"$gte": val.(bson.M)["$gte"], "$lte": yearToInt}
+			} else {
+				filter["release_year"] = bson.M{"$lte": yearToInt}
+			}
 		}
 	}
 
-	if sort == "" {
-		sort = "title"
+	// Определение сортировки
+	sortOptions := bson.D{}
+	if sortField == "" {
+		sortField = "title"
 	}
-	if order != "asc" && order != "desc" {
-		order = "asc"
+	sortOrder := 1
+	if order == "desc" {
+		sortOrder = -1
 	}
+	sortOptions = append(sortOptions, bson.E{Key: sortField, Value: sortOrder})
 
-	if sort == "genres" {
-		query = query.Order(fmt.Sprintf("genres->>0 %s", order))
-	} else {
-		query = query.Order(fmt.Sprintf("\"%s\" %s", sort, order))
-	}
-
-	var totalRecords int64
-	if err := query.Count(&totalRecords).Error; err != nil {
+	// Подсчет количества записей
+	totalRecords, err := movieCollection.CountDocuments(context.TODO(), filter)
+	if err != nil {
 		http.Error(w, "Error counting movies", http.StatusInternalServerError)
 		return
 	}
 
 	totalPages := int(math.Ceil(float64(totalRecords) / float64(limit)))
-	offset := (page - 1) * limit
+	skip := (page - 1) * limit
 
-	var movies []models.Movie
-	if err := query.Offset(offset).Limit(limit).Find(&movies).Error; err != nil {
+	// Запрос в MongoDB
+	cursor, err := movieCollection.Find(context.TODO(), filter, options.Find().SetSort(sortOptions).SetSkip(int64(skip)).SetLimit(int64(limit)))
+	if err != nil {
 		http.Error(w, "Error fetching movies", http.StatusInternalServerError)
 		return
 	}
+	defer cursor.Close(context.TODO())
 
+	var movies []models.Movie
+	if err = cursor.All(context.TODO(), &movies); err != nil {
+		http.Error(w, "Error decoding movies", http.StatusInternalServerError)
+		return
+	}
+
+	// Определение статуса запроса
 	status := "none"
-	if isFiltering && isSorting {
+	if len(filter) > 0 && len(sortOptions) > 0 {
 		status = "filtering and sorting"
-	} else if isFiltering {
+	} else if len(filter) > 0 {
 		status = "filtering"
-	} else if isSorting {
+	} else if len(sortOptions) > 0 {
 		status = "sorting"
 	}
 
+	// Логирование запроса
 	log.Printf("endpoint: /movies, method: GET, status: %s, filters: %+v, sort: %s, order: %s, page: %d, limit: %d",
-		status, map[string]interface{}{
-			"genres":    genres,
-			"countries": countries,
-			"year_from": yearFrom,
-			"year_to":   yearTo,
-		}, sort, order, page, limit)
+		status, filter, sortField, order, page, limit)
 
+	// Формирование JSON-ответа
 	response := map[string]interface{}{
 		"movies":      movies,
 		"total_pages": totalPages,
 		"page":        page,
 		"limit":       limit,
-		"filters": map[string]interface{}{
-			"genres":    genres,
-			"countries": countries,
-			"year_from": yearFrom,
-			"year_to":   yearTo,
-			"sort":      sort,
-			"order":     order,
-		},
-		"status": status,
+		"filters":     filter,
+		"status":      status,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

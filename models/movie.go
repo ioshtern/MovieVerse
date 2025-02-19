@@ -1,13 +1,15 @@
 package models
 
-import "gorm.io/datatypes"
+import "go.mongodb.org/mongo-driver/bson/primitive"
 
 type Movie struct {
-	ID          uint           `json:"id" gorm:"primaryKey"`
-	Title       string         `json:"title"`
-	Director    string         `json:"director"`
-	Country     string         `json:"country"`
-	Genres      datatypes.JSON `json:"genres" gorm:"type:jsonb"` // Change this to jsonb
-	ReleaseYear int            `json:"release_year"`
-	Description string         `json:"description"`
+	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	Title       string             `json:"title" bson:"title"`
+	Director    string             `json:"director" bson:"director"`
+	Country     string             `json:"country" bson:"country"`
+	Genres      []string           `json:"genres" bson:"genres"`
+	ReleaseYear int                `json:"release_year" bson:"release_year"`
+	Description string             `json:"description" bson:"description"`
+	ImageLink   string             `json:"image_link" bson:"image_link"`
+	Price       float64            `json:"price" bson:"price"`
 }
