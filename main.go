@@ -3,13 +3,15 @@ package main
 import (
 	"MovieVerse/controllers"
 	"MovieVerse/models"
+	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/time/rate"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
@@ -19,8 +21,27 @@ import (
 	"time"
 )
 
+func connectDB() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var err error
+	client, err = mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
+	if err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
+
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		log.Fatalf("Failed to ping MongoDB: %v", err)
+	}
+
+	fmt.Println("Connected to MongoDB!")
+}
+
 var (
-	db        *gorm.DB
+	client    *mongo.Client
+	database  *mongo.Database
 	logger    = logrus.New()
 	rlimiter  *RateLimiter
 	broadcast = make(chan ChatWSMessage)
@@ -61,7 +82,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var session models.ChatSession
-	if err := db.First(&session, uint(sessionID)).Error; err != nil {
+	err = database.Collection("chat_sessions").FindOne(context.TODO(), map[string]interface{}{"id": sessionID}).Decode(&session)
+	if err != nil {
 		// Chat session not found; create one (using dummy clientID 1, replace as needed).
 		newSession, err2 := getOrCreateChatSession(1)
 		if err2 != nil {
@@ -129,14 +151,15 @@ func saveChatMessage(chatID string, msg ChatWSMessage) {
 		Content:       msg.Content,
 		Timestamp:     time.Now(),
 	}
-	if err := db.Create(&chatMsg).Error; err != nil {
+	_, err = database.Collection("chat_messages").InsertOne(context.TODO(), chatMsg)
+	if err != nil {
 		log.Println("Failed to save chat message:", err)
 	}
 }
 
 func getOrCreateChatSession(clientID uint) (*models.ChatSession, error) {
 	var session models.ChatSession
-	err := db.Where("client_id = ? AND status = ?", clientID, "active").First(&session).Error
+	err := database.Collection("chat_sessions").FindOne(context.TODO(), map[string]interface{}{"client_id": clientID, "status": "active"}).Decode(&session)
 	if err == nil {
 		return &session, nil
 	}
@@ -145,7 +168,8 @@ func getOrCreateChatSession(clientID uint) (*models.ChatSession, error) {
 		Status:    "active",
 		CreatedAt: time.Now(),
 	}
-	if err := db.Create(&session).Error; err != nil {
+	_, err = database.Collection("chat_sessions").InsertOne(context.TODO(), session)
+	if err != nil {
 		return nil, err
 	}
 	return &session, nil
@@ -181,12 +205,7 @@ func closeChatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	err = db.Model(&models.ChatSession{}).
-		Where("id = ?", uint(chatID)).
-		Updates(models.ChatSession{
-			Status:   "closed",
-			ClosedAt: &now,
-		}).Error
+	_, err = database.Collection("chat_sessions").UpdateOne(context.TODO(), map[string]interface{}{"id": uint(chatID)}, map[string]interface{}{"$set": map[string]interface{}{"status": "closed", "closed_at": now}})
 	if err != nil {
 		http.Error(w, "Failed to close chat", http.StatusInternalServerError)
 		return
@@ -216,11 +235,16 @@ func chatHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var messages []models.ChatMessage
-	if err := db.Where("chat_session_id = ?", uint(chatID)).
-		Order("timestamp asc").
-		Find(&messages).Error; err != nil {
+	cursor, err := database.Collection("chat_messages").Find(context.TODO(), map[string]interface{}{"chat_session_id": uint(chatID)})
+	if err != nil {
 		http.Error(w, "Failed to load chat history", http.StatusInternalServerError)
 		return
+	}
+	defer cursor.Close(context.TODO())
+	for cursor.Next(context.TODO()) {
+		var message models.ChatMessage
+		cursor.Decode(&message)
+		messages = append(messages, message)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(messages)
@@ -245,7 +269,8 @@ func activeChatsHandler(w http.ResponseWriter, r *http.Request) {
 			startedAt := "Unknown"
 			if err == nil {
 				var session models.ChatSession
-				if err := db.First(&session, uint(sessionID)).Error; err == nil {
+				err := database.Collection("chat_sessions").FindOne(context.TODO(), map[string]interface{}{"id": uint(sessionID)}).Decode(&session)
+				if err == nil {
 					clientStr = strconv.Itoa(int(session.ClientID))
 					startedAt = session.CreatedAt.Format("2006-01-02 15:04:05")
 				}
@@ -314,21 +339,17 @@ func initDatabase() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	dsn := "user=" + os.Getenv("DB_USER") +
-		" password=" + os.Getenv("DB_PASSWORD") +
-		" dbname=" + os.Getenv("DB_NAME") +
-		" port=" + os.Getenv("DB_PORT") +
-		" sslmode=" + os.Getenv("DB_SSLMODE")
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	clientOptions := options.Client().ApplyURI(os.Getenv("MONGODB_URI"))
+	client, err = mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
-		log.Fatal("Failed to connect to the database:", err)
+		log.Fatal("Failed to connect to MongoDB:", err)
 	}
+	err = client.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal("Failed to ping MongoDB:", err)
+	}
+	database = client.Database(os.Getenv("MONGODB_DATABASE"))
 	log.Println("Database connected successfully")
-	err = db.AutoMigrate(&models.User{}, &models.Movie{}, &models.Review{}, &models.ChatSession{}, &models.ChatMessage{})
-	if err != nil {
-		log.Fatal("Database migration failed:", err)
-	}
-	log.Println("Database migrated successfully")
 }
 
 func handlePostRequest(w http.ResponseWriter, r *http.Request) {
@@ -365,6 +386,8 @@ func handleGetRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	connectDB()
+	controllers.SetClient(client)
 	initLogger()
 	initDatabase()
 	rlimiter = NewRateLimiter(1, 1)
@@ -414,7 +437,7 @@ func main() {
 
 	http.Handle("/login", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			controllers.LoginUser(db, w, r)
+			controllers.LoginUser(w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -422,7 +445,7 @@ func main() {
 	http.Handle("/signup", rateLimitedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
-			controllers.CreateUser(db, w, r)
+			controllers.CreateUser(w, r)
 		default:
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
@@ -448,7 +471,7 @@ func main() {
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	http.HandleFunc("/verify-email", func(w http.ResponseWriter, r *http.Request) {
-		controllers.VerifyEmail(db, w, r)
+		controllers.VerifyEmail(w, r)
 	})
 
 	http.HandleFunc("/get", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
@@ -465,6 +488,6 @@ func main() {
 
 	log.Println("WebSocket server started on ws://localhost:8080/ws")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal("Server error:", err)
+		log.Fatal("Error: ", err)
 	}
 }

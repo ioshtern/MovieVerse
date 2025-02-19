@@ -1,11 +1,13 @@
 package models
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 type User struct {
-	ID                uint   `json:"id" gorm:"primaryKey;autoIncrement"`
-	Email             string `json:"email" gorm:"uniqueIndex;not null"`
-	Username          string `json:"username" gorm:"not null"`
-	Password          string `json:"password" gorm:"not null"`
-	Admin             bool   `json:"admin" gorm:"default:false"`
-	VerificationToken string `json:"verification_token"`
-	EmailVerified     bool   `json:"email_verified" gorm:"default:false"`
+	ID                primitive.ObjectID `bson:"_id,omitempty"`
+	Email             string             `bson:"email"`
+	Username          string             `bson:"username"`
+	Password          string             `bson:"password" `
+	Admin             bool               `bson:"admin" `
+	VerificationToken string             `bson:"verification_token"`
+	EmailVerified     bool               `bson:"email_verified" gorm:"default:false"`
 }

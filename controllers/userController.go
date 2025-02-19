@@ -9,25 +9,65 @@ import (
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v4"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/gomail.v2"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"time"
 )
 
-func GetUsers(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	var users []models.User
-	if err := db.Find(&users).Error; err != nil {
+var client *mongo.Client
+
+func SetClient(c *mongo.Client) {
+	client = c
+}
+
+func GetUsers(w http.ResponseWriter, r *http.Request) {
+	collection := client.Database("movieverse").Collection("users")
+	cursor, err := collection.Find(context.TODO(), bson.M{})
+	if err != nil {
 		http.Error(w, "Failed to fetch users", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(users)
-	if err != nil {
+	var users []models.User
+	if err = cursor.All(context.TODO(), &users); err != nil {
+		http.Error(w, "Failed to decode users", http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
+func CreateUser(w http.ResponseWriter, r *http.Request) {
+	var user models.User
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+	collection := client.Database("movieverse").Collection("users")
+	var existingUser models.User
+	err := collection.FindOne(context.TODO(), bson.M{"email": user.Email}).Decode(&existingUser)
+	if err == nil {
+		http.Error(w, "Email already exists", http.StatusBadRequest)
+		return
+	} else if err != mongo.ErrNoDocuments {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	user.ID = primitive.NewObjectID()
+	user.VerificationToken, _ = generateVerificationToken()
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	user.Password = string(hashedPassword)
+	_, err = collection.InsertOne(context.TODO(), user)
+	if err != nil {
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "User created. Please check your email for verification."})
 }
 
 func generateVerificationToken() (string, error) {
@@ -38,90 +78,31 @@ func generateVerificationToken() (string, error) {
 	}
 	return base64.URLEncoding.EncodeToString(token), nil
 }
-
-func CreateUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	var user models.User
-
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid JSON format")
-		return
-	}
-
-	log.Printf("Incoming user data: %+v", user)
-
-	var existingUser models.User
-	if err := db.Where("email = ?", user.Email).First(&existingUser).Error; err == nil {
-		respondWithError(w, http.StatusBadRequest, "Email already exists")
-		return
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Printf("Error checking for existing email: %v", err)
-		respondWithError(w, http.StatusInternalServerError, "Internal server error during email check")
-		return
-	}
-
-	verificationToken, err := generateVerificationToken()
-	if err != nil {
-		log.Printf("Verification token error: %v", err)
-		respondWithError(w, http.StatusInternalServerError, "Failed to generate verification token")
-		return
-	}
-	user.VerificationToken = verificationToken
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Printf("Password hashing error: %v", err)
-		respondWithError(w, http.StatusInternalServerError, "Failed to hash password")
-		return
-	}
-	user.Password = string(hashedPassword)
-
-	if err := db.Create(&user).Error; err != nil {
-		log.Printf("Error saving user to database: %v", err)
-		return
-	}
-
-	if err := sendVerificationEmail(user.Email, user.VerificationToken); err != nil {
-		log.Printf("Failed to send verification email: %v", err)
-		respondWithError(w, http.StatusInternalServerError, "Failed to send verification email")
-		return
-	}
-
-	log.Printf("User %s created successfully", user.Email)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "User created. Please check your email for verification.",
-	})
-}
-
-func VerifyEmail(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+func VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		http.Error(w, "Verification token is required", http.StatusBadRequest)
 		return
 	}
-
+	collection := client.Database("movieverse").Collection("users")
 	var user models.User
-	if err := db.Where("verification_token = ?", token).First(&user).Error; err != nil {
+	err := collection.FindOne(context.TODO(), bson.M{"verificationtoken": token}).Decode(&user)
+	if err != nil {
 		http.Error(w, "Invalid or expired token", http.StatusBadRequest)
 		return
 	}
-
 	if user.EmailVerified {
 		http.Error(w, "Email is already verified", http.StatusBadRequest)
 		return
 	}
-	user.EmailVerified = true
-	user.VerificationToken = ""
-
-	if err := db.Save(&user).Error; err != nil {
+	update := bson.M{"$set": bson.M{"emailverified": true, "verificationtoken": ""}}
+	_, err = collection.UpdateOne(context.TODO(), bson.M{"_id": user.ID}, update)
+	if err != nil {
 		http.Error(w, "Failed to verify user", http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Email verified successfully. You can now log in.",
-	})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Email verified successfully. You can now log in."})
 }
 
 func sendVerificationEmail(email, token string) error {
@@ -131,12 +112,10 @@ func sendVerificationEmail(email, token string) error {
 	mailer.SetHeader("Subject", "MovieVerse - Email Verification")
 	verificationURL := "http://localhost:8080/verify-email?token=" + token
 	mailer.SetBody("text/plain", "Please verify your email by clicking the link: "+verificationURL)
-
 	dialer := gomail.NewDialer("smtp.gmail.com", 587, "gamebeast66@gmail.com", "xfjv jsee cpcg rusr")
 	if err := dialer.DialAndSend(mailer); err != nil {
 		return fmt.Errorf("failed to send email to %s: %w", email, err)
 	}
-
 	log.Printf("Verification email sent to %s", email)
 	return nil
 }
@@ -144,34 +123,39 @@ func sendVerificationEmail(email, token string) error {
 var jwtKey = []byte("your_secret_key")
 
 type Claims struct {
-	UserID uint `json:"userId"`
-	Admin  bool `json:"admin"`
+	UserID primitive.ObjectID `json:"userId"`
+	Admin  bool               `json:"admin"`
 	jwt.RegisteredClaims
 }
 
-func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+func LoginUser(w http.ResponseWriter, r *http.Request) {
 	var credentials struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid JSON format")
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
+
+	collection := client.Database("movieverse").Collection("users")
 	var user models.User
-	if err := db.Where("email = ?", credentials.Email).First(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			respondWithError(w, http.StatusUnauthorized, "Invalid email or password")
+	err := collection.FindOne(context.TODO(), bson.M{"email": credentials.Email}).Decode(&user)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		} else {
 			log.Printf("Error finding user: %v", err)
-			respondWithError(w, http.StatusInternalServerError, "Internal server error")
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password)); err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid email or password")
+		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
+
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
 		UserID: user.ID,
@@ -184,9 +168,10 @@ func LoginUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
 	tokenString, err := token.SignedString(jwtKey)
 	if err != nil {
 		log.Printf("Failed to sign token: %v", err)
-		respondWithError(w, http.StatusInternalServerError, "Failed to generate token")
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Login successful",
@@ -220,6 +205,7 @@ func ValidateJWT(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+
 func AdminOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := r.Context().Value("user").(*Claims)
@@ -230,6 +216,7 @@ func AdminOnly(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
 func UsersOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := r.Context().Value("user").(*Claims)
@@ -237,96 +224,52 @@ func UsersOnly(next http.Handler) http.Handler {
 			http.Error(w, "Access denied: Users only", http.StatusForbidden)
 			return
 		}
-		print(claims.UserID)
+		print(claims.UserID.Hex())
 		next.ServeHTTP(w, r)
 	})
 }
-func ProtectedHandler(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value("user").(*Claims)
-	if !ok {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Protected content accessed",
-		"userId":  claims.UserID,
-		"admin":   claims.Admin,
-	})
-}
-
-func respondWithError(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]string{
-		"error": message,
-	})
-}
-
-func GetUserByID(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+func GetUserByID(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "User ID is required", http.StatusBadRequest)
 		return
 	}
 
+	collection := client.Database("movieverse").Collection("users")
 	var user models.User
-	if err := db.First(&user, id).Error; err != nil {
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+	err = collection.FindOne(context.TODO(), bson.M{"_id": objectID}).Decode(&user)
+	if err != nil {
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(user)
-	if err != nil {
-		return
-	}
+	json.NewEncoder(w).Encode(user)
 }
 
-func UpdateUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	var user models.User
+func DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "User ID is required", http.StatusBadRequest)
 		return
 	}
-	if err := db.First(&user, id).Error; err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
-		return
-	}
-
-	if err := db.Save(&user).Error; err != nil {
-		http.Error(w, "Failed to update user", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(user)
+	collection := client.Database("movieverse").Collection("users")
+	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
 		return
 	}
-}
-
-func DeleteUser(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "User ID is required", http.StatusBadRequest)
-		return
-	}
-	if err := db.Delete(&models.User{}, id).Error; err != nil {
+	_, err = collection.DeleteOne(context.TODO(), bson.M{"_id": objectID})
+	if err != nil {
 		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(map[string]string{"message": "User deleted successfully"})
-	if err != nil {
-		return
-	}
+	json.NewEncoder(w).Encode(map[string]string{"message": "User deleted successfully"})
 }
