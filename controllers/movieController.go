@@ -15,14 +15,9 @@ import (
 	"strconv"
 )
 
-var movieCollection *mongo.Collection
-
-func InitMovieController(db *mongo.Database) {
-	movieCollection = db.Collection("movies")
-}
-
 // Get all movies
 func GetMovies(w http.ResponseWriter, r *http.Request) {
+	movieCollection := client.Database("movieverse").Collection("movies")
 	cursor, err := movieCollection.Find(context.TODO(), bson.M{})
 	if err != nil {
 		http.Error(w, "Failed to fetch movies", http.StatusInternalServerError)
@@ -42,6 +37,7 @@ func GetMovies(w http.ResponseWriter, r *http.Request) {
 
 // Get movie by ID
 func GetMovieByID(w http.ResponseWriter, r *http.Request) {
+	movieCollection := client.Database("movieverse").Collection("movies")
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "Movie ID is required", http.StatusBadRequest)
@@ -70,6 +66,8 @@ func GetMovieByID(w http.ResponseWriter, r *http.Request) {
 
 // Create new movie
 func CreateMovie(w http.ResponseWriter, r *http.Request) {
+	movieCollection := client.Database("movieverse").Collection("movies")
+
 	var movie models.Movie
 	if err := json.NewDecoder(r.Body).Decode(&movie); err != nil {
 		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
@@ -88,6 +86,8 @@ func CreateMovie(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateMovie(w http.ResponseWriter, r *http.Request) {
+	movieCollection := client.Database("movieverse").Collection("movies")
+
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "Movie ID is required", http.StatusBadRequest)
@@ -117,6 +117,8 @@ func UpdateMovie(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Movie updated successfully"})
 }
 func DeleteMovie(w http.ResponseWriter, r *http.Request) {
+	movieCollection := client.Database("movieverse").Collection("movies")
+
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "Movie ID is required", http.StatusBadRequest)
@@ -150,6 +152,7 @@ func init() {
 }
 
 func GetMoviesWithFilters(w http.ResponseWriter, r *http.Request) {
+	movieCollection := client.Database("movieverse").Collection("movies")
 	genres := r.URL.Query()["genres"]
 	countries := r.URL.Query()["country"]
 	yearFrom := r.URL.Query().Get("yearMin")
