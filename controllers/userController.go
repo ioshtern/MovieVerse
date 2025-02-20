@@ -47,6 +47,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
+
 	collection := client.Database("movieverse").Collection("users")
 	var existingUser models.User
 	err := collection.FindOne(context.TODO(), bson.M{"email": user.Email}).Decode(&existingUser)
@@ -57,15 +58,24 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
 	user.ID = primitive.NewObjectID()
 	user.VerificationToken, _ = generateVerificationToken()
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	user.Password = string(hashedPassword)
+
 	_, err = collection.InsertOne(context.TODO(), user)
 	if err != nil {
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
+
+	err = sendVerificationEmail(user.Email, user.VerificationToken)
+	if err != nil {
+		http.Error(w, "Failed to send verification email", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "User created. Please check your email for verification."})
 }
