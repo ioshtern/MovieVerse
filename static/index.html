@@ -41,6 +41,9 @@
             background-color: #f8f9fa;
             color: #000;
         }
+        .card-text{
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
@@ -73,80 +76,12 @@
         <input type="text" id="chat-message" class="form-control mt-2" placeholder="Type a message..." />
         <button id="send-button" class="btn btn-primary mt-2">Send</button>
     </div>
-    <div class="container p-4">
-        <h2 class="text-black">Trending Movies & TV Shows</h2>
-        <div class="row g-2">
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/taxidriver.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie1.png" class="card-img-top" alt="Taxi Driver" />
-                        <div class="card-text text-center">Taxi Driver</div>
-                    </a>
-                </div>
-            </div>
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/parasite.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie2.png" class="card-img-top" alt="Parasite" />
-                        <div class="card-text text-center">Parasite</div>
-                    </a>
-                </div>
-            </div>
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/breakingbad.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie3.png" class="card-img-top" alt="Breaking Bad" />
-                        <div class="card-text text-center">Breaking Bad</div>
-                    </a>
-                </div>
-            </div>
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/dark.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie4.png" class="card-img-top" alt="Dark" />
-                        <div class="card-text text-center">Dark</div>
-                    </a>
-                </div>
-            </div>
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/bojack.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie5.png" class="card-img-top" alt="Bojack" />
-                        <div class="card-text text-center">Bojack Horseman</div>
-                    </a>
-                </div>
-            </div>
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/harakiri.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie6.png" class="card-img-top" alt="Harakiri" />
-                        <div class="card-text text-center">Harakiri</div>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
 </section>
 <section>
     <div class="container p-4">
-        <h2 class="text-black">New Releases</h2>
-        <div class="row g-2">
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/beef.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie7.png" class="card-img-top" alt="Beef" />
-                        <div class="card-text text-center">Beef</div>
-                    </a>
-                </div>
-            </div>
-            <div class="col-sm-6 col-md-4 col-lg-2">
-                <div class="card bg-secondary p-1 movie">
-                    <a href="movies/skin.html" class="text-decoration-none text-black">
-                        <img src="static/pics/movie8.png" class="card-img-top" alt="Skin" />
-                        <div class="card-text text-center">The Skin I Live in</div>
-                    </a>
-                </div>
-            </div>
+        <h2 class="text-black">Trending Movies & TV Shows</h2>
+        <div id="movies-container" class="row">
+            <!-- Movie cards will be inserted here dynamically -->
         </div>
     </div>
 </section>
@@ -159,148 +94,42 @@
     </div>
 </footer>
 <script>
-    let ws;
-    // Connect to WebSocket with given chatID and load chat history once connected.
-    function connectWebSocket(chatID) {
-        console.log("Connecting with chatID:", chatID);
-        ws = new WebSocket("ws://localhost:8080/ws?chat_id=" + chatID);
-        ws.onopen = function () {
-            console.log("Connected to chat session: " + chatID);
-            loadChatHistory(chatID);
-        };
-        ws.onmessage = function (event) {
-            const message = JSON.parse(event.data);
-            displayMessage(message);
-        };
-        ws.onerror = function (error) {
-            console.error("WebSocket error:", error);
-        };
-        ws.onclose = function () {
-            console.log("WebSocket connection closed.");
-        };
-    }
-
-    // Append a single message to the chat box.
-    function displayMessage(message) {
-        const chatBox = document.getElementById("chat-box");
-        const newMessage = document.createElement("div");
-        newMessage.textContent = `[${message.timestamp}] ${message.username}: ${message.content}`;
-        chatBox.appendChild(newMessage);
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    // Load the chat history from the backend.
-    function loadChatHistory(chatID) {
-        fetch("/chat-history?chat_id=" + chatID, {
-            headers: { "Authorization": "Bearer " + localStorage.getItem("userToken") }
-        })
-            .then(res => res.json())
-            .then(history => {
-                console.log("Chat history:", history);
-                const chatBox = document.getElementById("chat-box");
-                chatBox.innerHTML = "";
-                history.forEach(msg => {
-                    // Adjust field names if necessary.
-                    const ts = new Date(msg.Timestamp);
-                    const newMessage = document.createElement("div");
-                    newMessage.textContent = `[${ts.toLocaleString()}] ${msg.Sender}: ${msg.Content}`;
-                    chatBox.appendChild(newMessage);
-                });
-                chatBox.scrollTop = chatBox.scrollHeight;
-            })
-            .catch(err => console.error("Error loading chat history:", err));
-    }
-
     document.addEventListener("DOMContentLoaded", () => {
-        // Token handling.
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get("token");
-        if (token) {
-            localStorage.setItem("userToken", token);
-        } else {
-            alert("Token missing or expired. Redirecting to login...");
-            window.location.href = "/login.html";
-            return;
-        }
+        fetch("/movies")
+            .then(response => response.json())
+            .then(movies => {
+                const container = document.getElementById("movies-container");
+                container.innerHTML = ""; // Clear container before appending movies
 
-        // Persist chat session using localStorage.
-        let chatID = localStorage.getItem("chat_id");
-        console.log("Found chatID in localStorage:", chatID);
-        if (!chatID) {
-            // Call /start-chat endpoint if no session ID exists.
-            fetch("/start-chat", {
-                method: "GET",
-                headers: { "Authorization": "Bearer " + localStorage.getItem("userToken") }
-            })
-                .then(res => res.json())
-                .then(session => {
-                    if (!session.ID) {
-                        console.error("No session ID returned from /start-chat");
-                        return;
-                    }
-                    chatID = session.ID.toString();
-                    localStorage.setItem("chat_id", chatID);
-                    // Update URL with chat_id.
-                    const newUrl = new URL(window.location.href);
-                    newUrl.searchParams.set("chat_id", chatID);
-                    window.history.replaceState({}, "", newUrl.toString());
-                    connectWebSocket(chatID);
-                })
-                .catch(err => {
-                    console.error("Error starting chat session:", err);
+                movies.forEach(movie => {
+                    const movieCard = `
+                    <div class="col-12 mb-4">
+                        <div class="card" style="max-width: 100%; height: 220px;">
+                            <div class="row g-0 h-100">
+                                <div class="col-md-2 d-flex align-items-center">
+                                    <img src="${movie.image_link}" class="card-img" style="height: 200px; width: auto" alt="${movie.title}">
+                                </div>
+                                <div class="col-md-10">
+                                    <div class="card-body d-flex flex-column h-100">
+                                        <h5 class="card-title">${movie.title} (${movie.release_year})</h5>
+                                        <p class="card-text"><strong>Director:</strong> ${movie.director}</p>
+                                        <p class="card-text"><strong>Country:</strong> ${movie.country}</p>
+                                        <p class="card-text">${movie.description}</p>
+                                        <div class="mt-auto d-flex justify-content-between align-items-center">
+                                            <span class="fs-5 fw-bold">$${movie.price.toFixed(2)}</span>
+                                            <button class="btn btn-primary">Add to Cart</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                    container.innerHTML += movieCard;
                 });
-        } else {
-            connectWebSocket(chatID);
-        }
-
-        // Send button event listener.
-        document.getElementById("send-button").addEventListener("click", () => {
-            const input = document.getElementById("chat-message");
-            const content = input.value.trim();
-            if (!content) return;
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                console.log("WebSocket is not open; cannot send message.");
-                return;
-            }
-            const message = {
-                chat_id: chatID,
-                username: "User", // Replace with actual username if available.
-                content: content,
-                timestamp: "" // Server will add timestamp.
-            };
-            ws.send(JSON.stringify(message));
-            input.value = "";
-        });
-
-        // Also send on Enter key press.
-        document.getElementById("chat-message").addEventListener("keypress", function (e) {
-            if (e.key === "Enter") {
-                document.getElementById("send-button").click();
-            }
-        });
+            })
+            .catch(error => console.error("Error fetching movies:", error));
     });
-
-    async function handleLogout() {
-        try {
-            const response = await fetch("/logout", {
-                method: "POST",
-                headers: {
-                    "Authorization": "Bearer " + localStorage.getItem("userToken")
-                }
-            });
-            if (response.ok) {
-                localStorage.removeItem("userToken");
-                localStorage.removeItem("chat_id");
-                alert("You have been logged out.");
-                window.location.href = "login.html";
-            } else {
-                alert("Logout failed: " + response.statusText);
-            }
-        } catch (error) {
-            console.error("Error during logout:", error);
-            alert("Logout failed. Please try again.");
-        }
-    }
 </script>
 </body>
 </html>
