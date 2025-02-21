@@ -7,8 +7,6 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
-
     <style>
         body {
             font-family: 'Roboto', sans-serif;
@@ -36,14 +34,13 @@
             position: relative;
             z-index: 1;
         }
-        /* Chat styles */
         #chat-box {
             height: 300px;
             overflow-y: scroll;
             background-color: #f8f9fa;
             color: #000;
         }
-        .card-text{
+        .card-text {
             opacity: 0.8;
         }
     </style>
@@ -58,7 +55,6 @@
                     <input class="form-control me-2" type="search" placeholder="Search..." aria-label="Search" />
                 </form>
                 <button class="btn btn-outline-light" type="submit">Search</button>
-                
                 <a href="#" class="btn btn-outline-light ms-2" id="logoutButton" onclick="handleLogout()">Log Out</a>
             </div>
         </div>
@@ -80,22 +76,54 @@
         <button id="send-button" class="btn btn-primary mt-2">Send</button>
     </div>
 </section>
-
 <section>
     <div class="container p-4">
         <h2 class="text-black">Your Cart</h2>
         <div id="cart-container" class="row">
-            <!-- Cart items will be inserted here dynamically -->
         </div>
         <div id="checkout-container"></div>
     </div>
 </section>
-
+<section>
+    <div class="container p-4">
+        <h2 class="text-black">Search & Filter Movies</h2>
+        <form id="filter-form">
+            <div class="row">
+                <div class="col-md-4">
+                    <input type="text" id="search-term" class="form-control" placeholder="Search by title or description" />
+                </div>
+                <div class="col-md-2">
+                    <input type="number" id="min-price" class="form-control" placeholder="Min Price" step="0.01" />
+                </div>
+                <div class="col-md-2">
+                    <input type="number" id="max-price" class="form-control" placeholder="Max Price" step="0.01" />
+                </div>
+                <div class="col-md-2">
+                    <select id="sort-field" class="form-control">
+                        <option value="title">Title</option>
+                        <option value="price">Price</option>
+                        <option value="release_year">Release Year</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="order" class="form-control">
+                        <option value="asc">Ascending</option>
+                        <option value="desc">Descending</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</section>
 <section>
     <div class="container p-4">
         <h2 class="text-black">Trending Movies & TV Shows</h2>
         <div id="movies-container" class="row">
-            <!-- Movie cards will be inserted here dynamically -->
         </div>
     </div>
 </section>
@@ -107,156 +135,212 @@
         </a>
     </div>
 </footer>
+<script ></script>
 <script>
-   document.addEventListener("DOMContentLoaded", () => {
-    fetch("/movies")
-        .then(response => response.json())
-        .then(movies => {
-            const container = document.getElementById("movies-container");
-            container.innerHTML = ""; // Clear container before appending movies
-
-            movies.forEach(movie => {
-                const movieCard = `
-                <div class="col-12 mb-4">
-                    <div class="card" style="max-width: 100%; height: 220px;">
-                        <div class="row g-0 h-100">
-                            <div class="col-md-2 d-flex align-items-center">
-                                <img src="${movie.image_link}" class="card-img" style="height: 200px; width: auto" alt="${movie.title}">
-                            </div>
-                            <div class="col-md-10">
-                                <div class="card-body d-flex flex-column h-100">
-                                    <h5 class="card-title">${movie.title} (${movie.release_year})</h5>
-                                    <p class="card-text"><strong>Director:</strong> ${movie.director}</p>
-                                    <p class="card-text"><strong>Country:</strong> ${movie.country}</p>
-                                    <p class="card-text">${movie.description}</p>
-                                    <div class="mt-auto d-flex justify-content-between align-items-center">
-                                        <span class="fs-5 fw-bold">$${movie.price.toFixed(2)}</span>
-                                        <button class="btn btn-primary add-to-cart" 
-                                            data-id="${movie.id}" 
-                                            data-title="${movie.title}" 
-                                            data-price="${movie.price}" 
-                                            data-image="${movie.image_link}">
-                                            Add to Cart
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-                container.innerHTML += movieCard;
-            });
-
-            // Attach event listeners after movies are loaded
-            document.querySelectorAll(".add-to-cart").forEach(button => {
-                button.addEventListener("click", function () {
-                    const movie = {
-                        id: this.dataset.id,
-                        title: this.dataset.title,
-                        price: parseFloat(this.dataset.price),
-                        image: this.dataset.image,
-                        quantity: 1
-                    };
-                    addToCart(movie);
-                });
-            });
-
-            updateCartUI();
-        })
-        .catch(error => console.error("Error fetching movies:", error));
-});
-
-function addToCart(movie) {
-    let cart = JSON.parse(localStorage.getItem("cart")) || [];
-
-    const existingMovie = cart.find(item => item.id === movie.id);
-    if (!existingMovie) {
-        cart.push(movie);
-    }
-
-    localStorage.setItem("cart", JSON.stringify(cart));
-    updateCartUI();
-}
-
-function removeFromCart(index) {
-    let cart = JSON.parse(localStorage.getItem("cart")) || [];
-    cart.splice(index, 1);
-
-    localStorage.setItem("cart", JSON.stringify(cart));
-    updateCartUI();
-}
-
-function updateCartUI() {
-    const cartContainer = document.getElementById("cart-container");
-    const checkoutContainer = document.getElementById("checkout-container");
-
-    if (!cartContainer || !checkoutContainer) return;
-
-    let cart = JSON.parse(localStorage.getItem("cart")) || [];
-
-    if (cart.length === 0) {
-        cartContainer.innerHTML = "<p class='text-black'>Your cart is empty.</p>";
-        checkoutContainer.innerHTML = ""; // Hide checkout button
-        return;
-    }
-
-    let totalPrice = 0;
-    cartContainer.innerHTML = cart.map((item, index) => {
-        totalPrice += item.price;
-        return `
-            <div class="cart-item d-flex align-items-center mb-3 border p-2">
-                <img src="${item.image}" alt="${item.title}" width="50" class="me-2">
-                <div>
-                    <p class="mb-0 text-black fw-bold">${item.title}</p>
-                    <p class="mb-0 text-black">Price: $${item.price.toFixed(2)}</p>
-                </div>
-                <button class="btn btn-danger ms-auto" onclick="removeFromCart(${index})">Remove</button>
-            </div>
-        `;
-    }).join("");
-
-    cartContainer.innerHTML += `<h4 class="text-black fw-bold">Total: $${totalPrice.toFixed(2)}</h4>`;
-
-    // Show checkout button
-    checkoutContainer.innerHTML = `
-        <button class="btn btn-success mt-2 w-100">Checkout</button>
-    `;
-
-}
-
-function checkout() {
-    // Retrieve cart items from local storage
-    const cart = JSON.parse(localStorage.getItem("cart")) || [];
-    if (cart.length === 0) {
-      alert("Your cart is empty!");
-      return;
-    }
-
-    // Send a POST request with cart data to the backend
-    fetch("/checkout", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ movies: cart })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.status === "success") {
-        alert("Checkout successful!");
-        localStorage.removeItem("cart");
-        updateCartUI();
-      } else {
-        alert("Checkout failed. Please try again.");
-      }
-    })
-    .catch(error => {
-      console.error("Error during checkout:", error);
-      alert("An error occurred during checkout.");
+    document.addEventListener("DOMContentLoaded", () => {
+        fetchMovies();
+        fetch("/movies")
+            .then(response => response.json())
+            .then(movies => {
+                displayMovies(movies);
+                attachCartListeners();
+                updateCartUI();
+            })
+            .catch(error => console.error("Error fetching movies:", error));
     });
-}
 
+    function fetchMovies(queryParams = {}) {
+        let url = '/search?';
+        for (let key in queryParams) {
+            if (queryParams[key] !== "") {
+                url += `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}&`;
+            }
+        }
+        console.log("Fetching movies with URL:", url);
+        fetch(url)
+            .then(response => response.json())
+            .then(result => {
+                console.log("Fetched movies:", result);
+                displayMovies(result.movies);
+            })
+            .catch(error => console.error("Error fetching movies:", error));
+    }
+
+    function displayMovies(movies) {
+        const container = document.getElementById("movies-container");
+        container.innerHTML = "";
+        movies.forEach(movie => {
+            const movieCard = `
+        <div class="col-12 mb-4">
+          <div class="card" style="max-width: 100%; height: 220px;">
+            <div class="row g-0 h-100">
+              <div class="col-md-2 d-flex align-items-center">
+                <img src="${movie.image_link}" class="card-img" style="height: 200px; width: auto" alt="${movie.title}">
+              </div>
+              <div class="col-md-10">
+                <div class="card-body d-flex flex-column h-100">
+                  <h5 class="card-title">${movie.title} (${movie.release_year})</h5>
+                  <p class="card-text"><strong>Director:</strong> ${movie.director}</p>
+                  <p class="card-text"><strong>Country:</strong> ${movie.country}</p>
+                  <p class="card-text">${movie.description}</p>
+                  <div class="mt-auto d-flex justify-content-between align-items-center">
+                    <span class="fs-5 fw-bold">$${movie.price.toFixed(2)}</span>
+                    <button class="btn btn-primary add-to-cart"
+                        data-id="${movie.id}"
+                        data-title="${movie.title}"
+                        data-price="${movie.price}"
+                        data-image="${movie.image_link}">
+                        Add to Cart
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+            container.innerHTML += movieCard;
+        });
+        attachCartListeners();
+    }
+
+    function attachCartListeners() {
+        document.querySelectorAll(".add-to-cart").forEach(button => {
+            button.addEventListener("click", function () {
+                const movie = {
+                    id: this.dataset.id,
+                    title: this.dataset.title,
+                    price: parseFloat(this.dataset.price),
+                    image: this.dataset.image,
+                    quantity: 1
+                };
+                addToCart(movie);
+            });
+        });
+    }
+
+    document.getElementById("filter-form").addEventListener("submit", function(e) {
+        e.preventDefault();
+        const searchTerm = document.getElementById("search-term").value;
+        const minPrice = document.getElementById("min-price").value;
+        const maxPrice = document.getElementById("max-price").value;
+        const sortField = document.getElementById("sort-field").value;
+        const order = document.getElementById("order").value;
+        const params = {
+            q: searchTerm,
+            minPrice: minPrice,
+            maxPrice: maxPrice,
+            sort: sortField,
+            order: order,
+            page: 1,
+            limit: 10
+        };
+        fetchMovies(params);
+    });
+
+    function addToCart(movie) {
+        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        const existingMovie = cart.find(item => item.id === movie.id);
+        if (existingMovie) {
+            existingMovie.quantity = (existingMovie.quantity || 1) + 1;
+        } else {
+            cart.push(movie);
+        }
+        localStorage.setItem("cart", JSON.stringify(cart));
+        updateCartUI();
+    }
+
+    function removeFromCart(index) {
+        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        cart.splice(index, 1);
+        localStorage.setItem("cart", JSON.stringify(cart));
+        updateCartUI();
+    }
+
+    function updateCartUI() {
+        const cartContainer = document.getElementById("cart-container");
+        const checkoutContainer = document.getElementById("checkout-container");
+        if (!cartContainer || !checkoutContainer) return;
+        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        if (cart.length === 0) {
+            cartContainer.innerHTML = "<p class='text-black'>Your cart is empty.</p>";
+            checkoutContainer.innerHTML = "";
+            return;
+        }
+        let totalPrice = 0;
+        cartContainer.innerHTML = cart.map((item, index) => {
+            totalPrice += item.price * item.quantity;
+            return `
+        <div class="cart-item d-flex align-items-center mb-3 border p-2">
+          <img src="${item.image}" alt="${item.title}" width="50" class="me-2">
+          <div>
+            <p class="mb-0 text-black fw-bold">${item.title}</p>
+            <p class="mb-0 text-black">Price: $${item.price.toFixed(2)} x ${item.quantity}</p>
+          </div>
+          <button class="btn btn-danger ms-auto" onclick="removeFromCart(${index})">Remove</button>
+        </div>
+      `;
+        }).join("");
+        cartContainer.innerHTML += `<h4 class="text-black fw-bold">Total: $${totalPrice.toFixed(2)}</h4>`;
+        checkoutContainer.innerHTML = `<button class="btn btn-success mt-2 w-100" onclick="checkout()">Checkout</button>`;
+    }
+
+    function checkout() {
+        const cart = JSON.parse(localStorage.getItem("cart")) || [];
+        if (cart.length === 0) {
+            alert("Your cart is empty!");
+            return;
+        }
+        fetch("/checkout", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ movies: cart })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert("Checkout successful!");
+                    localStorage.removeItem("cart");
+                    updateCartUI();
+                } else {
+                    alert("Checkout failed. Please try again.");
+                }
+            })
+            .catch(error => {
+                console.error("Error during checkout:", error);
+                alert(error);
+            });
+    }
+    async function handleLogout() {
+        try {
+            const response = await fetch("/logout", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + localStorage.getItem("userToken"),
+                },
+                "Authorization": "Bearer " + localStorage.getItem("userToken")
+            }
+        );
+
+        if (response.ok) {
+            localStorage.removeItem('userToken');
+            alert('You have been logged out.');
+            window.location.href = 'login.html';
+            localStorage.removeItem("userToken");
+            localStorage.removeItem("chat_id");
+            alert("You have been logged out.");
+            window.location.href = "login.html";
+        } else {
+            alert('Logout failed: ' + response.statusText);
+            alert("Logout failed: " + response.statusText);
+        }
+    } catch (error) {
+        console.error("Error during logout:", error);
+        alert("Logout failed. Please try again.");
+    }
+    }
 </script>
 </body>
 </html>

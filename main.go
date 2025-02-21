@@ -66,8 +66,6 @@ type ChatWSMessage struct {
 
 var activeChats = make(map[string]map[*websocket.Conn]bool)
 
-// handleConnections upgrades the HTTP connection to a WebSocket connection.
-// It verifies that the provided chat session exists (or creates one if not).
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	chatID := r.URL.Query().Get("chat_id")
 	if chatID == "" {
@@ -75,7 +73,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify that the chat session exists in the DB.
 	sessionID, err := strconv.ParseUint(chatID, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid chat session ID", http.StatusBadRequest)
@@ -84,7 +81,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	var session models.ChatSession
 	err = database.Collection("chat_sessions").FindOne(context.TODO(), map[string]interface{}{"id": sessionID}).Decode(&session)
 	if err != nil {
-		// Chat session not found; create one (using dummy clientID 1, replace as needed).
 		newSession, err2 := getOrCreateChatSession(1)
 		if err2 != nil {
 			http.Error(w, "Failed to create chat session", http.StatusInternalServerError)
@@ -175,12 +171,10 @@ func getOrCreateChatSession(clientID uint) (*models.ChatSession, error) {
 	return &session, nil
 }
 
-// Dummy extraction of clientID; replace with your JWT/session extraction logic.
 func extractClientID(r *http.Request) uint {
 	return 1
 }
 
-// startChatHandler is the /start-chat endpoint that creates or retrieves a chat session.
 func startChatHandler(w http.ResponseWriter, r *http.Request) {
 	clientID := extractClientID(r)
 	session, err := getOrCreateChatSession(clientID)
@@ -192,7 +186,6 @@ func startChatHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(session)
 }
 
-// closeChatHandler marks a chat session as closed and removes its active connections.
 func closeChatHandler(w http.ResponseWriter, r *http.Request) {
 	chatIDStr := r.URL.Query().Get("chat_id")
 	if chatIDStr == "" {
@@ -222,7 +215,6 @@ func closeChatHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Chat closed successfully"))
 }
 
-// chatHistoryHandler returns all chat messages for a given chat session.
 func chatHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	chatIDStr := r.URL.Query().Get("chat_id")
 	if chatIDStr == "" {
@@ -250,7 +242,6 @@ func chatHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(messages)
 }
 
-// ActiveChat represents data returned for each active chat session to the admin.
 type ActiveChat struct {
 	ChatID    string `json:"chat_id"`
 	Client    string `json:"client"`
@@ -258,7 +249,6 @@ type ActiveChat struct {
 	Clients   int    `json:"clients"`
 }
 
-// activeChatsHandler returns a list of active chat sessions.
 func activeChatsHandler(w http.ResponseWriter, r *http.Request) {
 	var chats []ActiveChat
 	mutex.Lock()
@@ -354,7 +344,7 @@ func initDatabase() {
 	}
 
 	database = client.Database(os.Getenv("MONGODB_DATABASE"))
-	movieCollection = database.Collection("movies") // 🔥 Добавлено!
+	movieCollection = database.Collection("movies")
 
 	log.Println("Database connected successfully")
 }
@@ -420,12 +410,13 @@ func main() {
 		http.ServeFile(w, r, "static/admin.html")
 	}))))
 
-	// Register endpoints.
 	http.Handle("/start-chat", controllers.ValidateJWT(controllers.UsersOnly(http.HandlerFunc(startChatHandler))))
 	http.Handle("/chat-history", controllers.ValidateJWT(controllers.UsersOnly(http.HandlerFunc(chatHistoryHandler))))
 	http.Handle("/admin/active-chats", controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(activeChatsHandler))))
 	http.Handle("/close-chat", controllers.ValidateJWT(controllers.AdminOnly(http.HandlerFunc(closeChatHandler))))
-
+	http.Handle("/checkout", rateLimitedHandler(controllers.Checkout))
+	http.Handle("/search", http.HandlerFunc(controllers.SearchAndFilterMovies))
+	http.HandleFunc("/admin/dashboard", controllers.GetAnalyticsDashboard)
 	http.HandleFunc("/post", rateLimitedHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			handlePostRequest(w, r)

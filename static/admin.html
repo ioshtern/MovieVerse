@@ -95,6 +95,27 @@
             padding: 10px;
             margin-bottom: 10px;
         }
+        #statistics-container {
+            margin: 20px auto;
+            max-width: 80%;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px #ddd;
+            padding: 20px;
+        }
+        #stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        #stats-table th, #stats-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        #stats-table th {
+            background-color: #f4f4f4;
+        }
     </style>
 </head>
 <body>
@@ -165,6 +186,14 @@
     <button type="submit">Delete User</button>
 </form>
 
+<section id="statistics-container">
+    <h2>Dashboard Analytics</h2>
+    <div id="stats-content">
+        <p>Loading statistics...</p>
+    </div>
+    <button onclick="getAnalytics()">Refresh Analytics</button>
+</section>
+
 <section id="active-chats-container">
     <h2>Active Client Chats</h2>
     <table id="active-chats-table">
@@ -194,7 +223,6 @@
     let adminSocket = null;
     let currentChatID = null;
 
-    // Connect to a chat session via WebSocket and load its history.
     function joinChat(chatID) {
         currentChatID = chatID;
         document.getElementById("chat-session-id").textContent = chatID;
@@ -220,7 +248,6 @@
         };
     }
 
-    // Load chat history from the backend for the given chatID.
     function loadChatHistory(chatID) {
         fetch(apiUrl + "/chat-history?chat_id=" + chatID, {
             headers: { "Authorization": "Bearer " + localStorage.getItem("userToken") }
@@ -229,9 +256,8 @@
             .then(history => {
                 console.log("Chat history loaded:", history);
                 const chatBox = document.getElementById("chat-box-admin");
-                chatBox.innerHTML = ""; // Clear previous messages.
+                chatBox.innerHTML = "";
                 history.forEach(msg => {
-                    // Adjust property names based on your models.
                     const ts = new Date(msg.Timestamp);
                     const newMessage = document.createElement("div");
                     newMessage.textContent = `[${ts.toLocaleString()}] ${msg.Sender}: ${msg.Content}`;
@@ -242,7 +268,6 @@
             .catch(err => console.error("Error loading chat history:", err));
     }
 
-    // Append a single message to the admin chat box.
     function appendAdminMessage(message) {
         const chatBox = document.getElementById("chat-box-admin");
         const msgDiv = document.createElement("div");
@@ -251,7 +276,6 @@
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // Fetch active chat sessions from the backend.
     function getActiveChats() {
         fetch(apiUrl + "/admin/active-chats", {
             headers: { "Authorization": "Bearer " + localStorage.getItem("userToken") }
@@ -268,46 +292,237 @@
                 chats.forEach(chat => {
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
-          <td>${chat.chat_id}</td>
-          <td>${chat.client}</td>
-          <td>${chat.started_at}</td>
-          <td>
-            <button onclick="joinChat('${chat.chat_id}')">Join Chat</button>
-            <button onclick="closeChat('${chat.chat_id}')">Close Chat</button>
-          </td>
-        `;
+            <td>${chat.chat_id}</td>
+            <td>${chat.client}</td>
+            <td>${chat.started_at}</td>
+            <td>
+              <button onclick="joinChat('${chat.chat_id}')">Join Chat</button>
+              <button onclick="closeChat('${chat.chat_id}')">Close Chat</button>
+            </td>
+          `;
                     tbody.appendChild(tr);
                 });
             })
             .catch(err => console.error("Error fetching active chats:", err));
     }
 
-    // Close a chat session.
-    function closeChat(chatID) {
-        if (!chatID) return;
-        fetch(apiUrl + "/close-chat?chat_id=" + chatID, {
-            method: "POST",
+    function getAnalytics() {
+        fetch(apiUrl + "/admin/dashboard", {
             headers: { "Authorization": "Bearer " + localStorage.getItem("userToken") }
         })
-            .then(res => res.text())
-            .then(response => {
-                alert("Chat closed: " + response);
-                if (adminSocket) {
-                    adminSocket.close();
-                    adminSocket = null;
+            .then(res => res.json())
+            .then(data => {
+                console.log("Analytics Dashboard Data:", data);
+                const statsDiv = document.getElementById("stats-content");
+                statsDiv.innerHTML = `
+          <p><strong>Total Sales:</strong> $${data.totalSales.toFixed(2)}</p>
+          <p><strong>Total Orders:</strong> ${data.orderCount}</p>
+          <h3>Most Purchased Movies</h3>
+        `;
+                if (data.mostPurchasedMovies && data.mostPurchasedMovies.length > 0) {
+                    let tableHTML = `
+            <table id="stats-table">
+              <thead>
+                <tr>
+                  <th>Movie ID</th>
+                  <th>Title</th>
+                  <th>Total Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+                    data.mostPurchasedMovies.forEach(item => {
+                        tableHTML += `
+              <tr>
+                <td>${item._id.id}</td>
+                <td>${item._id.title}</td>
+                <td>${item.totalQuantity}</td>
+              </tr>
+            `;
+                    });
+                    tableHTML += `</tbody></table>`;
+                    statsDiv.innerHTML += tableHTML;
+                } else {
+                    statsDiv.innerHTML += "<p>No purchase data available.</p>";
                 }
-                document.getElementById("chat-interface").style.display = "none";
-                localStorage.removeItem("admin_chat_id");
-                currentChatID = null;
-                getActiveChats();
             })
-            .catch(err => {
-                console.error("Error closing chat:", err);
-                alert("Failed to close chat.");
+            .catch(error => {
+                console.error("Error fetching analytics:", error);
+                const statsDiv = document.getElementById("stats-content");
+                statsDiv.innerHTML = "<p>Error loading analytics data.</p>";
             });
     }
 
-    // On DOMContentLoaded, set up token handling, active chats, and auto-reconnect.
+    document.getElementById("filter-form").addEventListener("submit", function(e) {
+        e.preventDefault();
+        const searchTerm = document.getElementById("search-term").value;
+        const minPrice = document.getElementById("min-price").value;
+        const maxPrice = document.getElementById("max-price").value;
+        const sortField = document.getElementById("sort-field").value;
+        const order = document.getElementById("order").value;
+        const params = {
+            q: searchTerm,
+            minPrice: minPrice,
+            maxPrice: maxPrice,
+            sort: sortField,
+            order: order,
+            page: 1,
+            limit: 10
+        };
+        fetchMovies(params);
+    });
+
+    function fetchMovies(queryParams = {}) {
+        let url = '/search?';
+        for (let key in queryParams) {
+            if (queryParams[key] !== "") {
+                url += `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}&`;
+            }
+        }
+        console.log("Fetching movies with URL:", url);
+        fetch(url)
+            .then(response => response.json())
+            .then(result => {
+                console.log("Fetched movies:", result);
+                displayMovies(result.movies);
+            })
+            .catch(error => console.error("Error fetching movies:", error));
+    }
+
+    function displayMovies(movies) {
+        const container = document.getElementById("movies-container");
+        container.innerHTML = "";
+        if (!movies || !Array.isArray(movies)) {
+            console.error("No movies found or invalid format", movies);
+            container.innerHTML = "<p>No movies found.</p>";
+            return;
+        }
+        movies.forEach(movie => {
+            const movieCard = `
+        <div class="col-12 mb-4">
+          <div class="card" style="max-width: 100%; height: 220px;">
+            <div class="row g-0 h-100">
+              <div class="col-md-2 d-flex align-items-center">
+                <img src="${movie.image_link}" class="card-img" style="height: 200px; width: auto" alt="${movie.title}">
+              </div>
+              <div class="col-md-10">
+                <div class="card-body d-flex flex-column h-100">
+                  <h5 class="card-title">${movie.title} (${movie.release_year})</h5>
+                  <p class="card-text"><strong>Director:</strong> ${movie.director}</p>
+                  <p class="card-text"><strong>Country:</strong> ${movie.country}</p>
+                  <p class="card-text">${movie.description}</p>
+                  <div class="mt-auto d-flex justify-content-between align-items-center">
+                    <span class="fs-5 fw-bold">$${movie.price.toFixed(2)}</span>
+                    <button class="btn btn-primary add-to-cart"
+                        data-id="${movie.id}"
+                        data-title="${movie.title}"
+                        data-price="${movie.price}"
+                        data-image="${movie.image_link}">
+                        Add to Cart
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+            container.innerHTML += movieCard;
+        });
+        attachCartListeners();
+    }
+
+    function attachCartListeners() {
+        document.querySelectorAll(".add-to-cart").forEach(button => {
+            button.addEventListener("click", function () {
+                const movie = {
+                    id: this.dataset.id,
+                    title: this.dataset.title,
+                    price: parseFloat(this.dataset.price),
+                    image: this.dataset.image,
+                    quantity: 1
+                };
+                addToCart(movie);
+            });
+        });
+    }
+
+    function addToCart(movie) {
+        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        const existingMovie = cart.find(item => item.id === movie.id);
+        if (existingMovie) {
+            existingMovie.quantity = (existingMovie.quantity || 1) + 1;
+        } else {
+            cart.push(movie);
+        }
+        localStorage.setItem("cart", JSON.stringify(cart));
+        updateCartUI();
+    }
+
+    function removeFromCart(index) {
+        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        cart.splice(index, 1);
+        localStorage.setItem("cart", JSON.stringify(cart));
+        updateCartUI();
+    }
+
+    function updateCartUI() {
+        const cartContainer = document.getElementById("cart-container");
+        const checkoutContainer = document.getElementById("checkout-container");
+        if (!cartContainer || !checkoutContainer) return;
+        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        if (cart.length === 0) {
+            cartContainer.innerHTML = "<p class='text-black'>Your cart is empty.</p>";
+            checkoutContainer.innerHTML = "";
+            return;
+        }
+        let totalPrice = 0;
+        cartContainer.innerHTML = cart.map((item, index) => {
+            totalPrice += item.price * item.quantity;
+            return `
+        <div class="cart-item d-flex align-items-center mb-3 border p-2">
+          <img src="${item.image}" alt="${item.title}" width="50" class="me-2">
+          <div>
+            <p class="mb-0 text-black fw-bold">${item.title}</p>
+            <p class="mb-0 text-black">Price: $${item.price.toFixed(2)} x ${item.quantity}</p>
+          </div>
+          <button class="btn btn-danger ms-auto" onclick="removeFromCart(${index})">Remove</button>
+        </div>
+      `;
+        }).join("");
+        cartContainer.innerHTML += `<h4 class="text-black fw-bold">Total: $${totalPrice.toFixed(2)}</h4>`;
+        checkoutContainer.innerHTML = `<button class="btn btn-success mt-2 w-100" onclick="checkout()">Checkout</button>`;
+    }
+
+    function checkout() {
+        const cart = JSON.parse(localStorage.getItem("cart")) || [];
+        if (cart.length === 0) {
+            alert("Your cart is empty!");
+            return;
+        }
+        fetch("/checkout", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ movies: cart })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert("Checkout successful!");
+                    localStorage.removeItem("cart");
+                    updateCartUI();
+                } else {
+                    alert("Checkout failed. Please try again.");
+                }
+            })
+            .catch(error => {
+                console.error("Error during checkout:", error);
+                alert(error);
+            });
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
         const params = new URLSearchParams(window.location.search);
         const token = params.get("token");
@@ -318,14 +533,11 @@
             window.location.href = "/login.html";
             return;
         }
-        // Fetch active chats initially.
         getActiveChats();
-        // Auto-join admin chat session if one was persisted.
         let storedChatID = localStorage.getItem("admin_chat_id");
         if (storedChatID) {
             joinChat(storedChatID);
         }
-        // Attach send button listener.
         document.getElementById("admin-send-button").addEventListener("click", () => {
             const input = document.getElementById("admin-chat-message");
             const content = input.value.trim();
@@ -336,9 +548,9 @@
             }
             const msg = {
                 chat_id: currentChatID,
-                username: "Admin", // Replace with actual admin username if available.
+                username: "Admin",
                 content: content,
-                timestamp: "" // Server adds timestamp.
+                timestamp: ""
             };
             adminSocket.send(JSON.stringify(msg));
             input.value = "";
@@ -348,8 +560,8 @@
                 document.getElementById("admin-send-button").click();
             }
         });
-        // Refresh active chats every 10 seconds.
         setInterval(getActiveChats, 10000);
+        getAnalytics();
     });
 
     async function handleLogout() {
