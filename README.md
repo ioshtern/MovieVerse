@@ -2,11 +2,6 @@
 ## Project Description
 MovieVerse is a dynamic web application designed to provide users with a platform to explore, review, and interact with movies. The project allows users to view movie details, submit reviews, and manage user interactions seamlessly. It is targeted at movie enthusiasts who want a centralized place to discover and discuss films.
 
-## Team Members
-- Bekzat Nabiev 
-- Davlat Sunnatov
-- Alan Yersainov
-
 ## Screenshot
 ![image](https://github.com/user-attachments/assets/f2ac9c0f-2842-4813-a888-f7e8fb764114)
 
